@@ -1,4 +1,4 @@
-import ClaudeAccountsCore
+import RelevoCore
 import SwiftUI
 
 struct SessionPicker: View {

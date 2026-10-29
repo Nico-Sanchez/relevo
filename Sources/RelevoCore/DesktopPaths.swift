@@ -16,7 +16,7 @@ public struct DesktopPaths: Sendable {
         return DesktopPaths(
             data: library.appending(path: "Application Support/Claude"),
             logs: library.appending(path: "Logs/Claude"),
-            storage: library.appending(path: "Application Support/ClaudeAccounts")
+            storage: library.appending(path: "Application Support/Relevo")
         )
     }
 

@@ -2,31 +2,31 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClaudeAccounts",
+    name: "Relevo",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "ClaudeAccounts", targets: ["ClaudeAccounts"]),
+        .executable(name: "Relevo", targets: ["Relevo"]),
     ],
     targets: [
         .target(
-            name: "ClaudeAccountsCore",
+            name: "RelevoCore",
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .target(
-            name: "ClaudeAccountsUI",
-            dependencies: ["ClaudeAccountsCore"]
+            name: "RelevoUI",
+            dependencies: ["RelevoCore"]
         ),
         .executableTarget(
-            name: "ClaudeAccounts",
-            dependencies: ["ClaudeAccountsUI"]
+            name: "Relevo",
+            dependencies: ["RelevoUI"]
         ),
         .executableTarget(
             name: "Screenshots",
-            dependencies: ["ClaudeAccountsCore", "ClaudeAccountsUI"]
+            dependencies: ["RelevoCore", "RelevoUI"]
         ),
         .testTarget(
-            name: "ClaudeAccountsCoreTests",
-            dependencies: ["ClaudeAccountsCore"],
+            name: "RelevoCoreTests",
+            dependencies: ["RelevoCore"],
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
     ]

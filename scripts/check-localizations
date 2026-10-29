@@ -5,6 +5,6 @@ cd "$(dirname "$0")/.."
 strings="build/localization/strings"
 rm -rf build/localization
 mkdir -p "$strings"
-swift build --scratch-path build/localization/build --product ClaudeAccounts \
+swift build --scratch-path build/localization/build --product Relevo \
     -Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path -Xswiftc "$PWD/$strings" >/dev/null
 swift scripts/check-localizations.swift "$strings" Resources/Localization

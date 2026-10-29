@@ -1,6 +1,6 @@
 import AppKit
-import ClaudeAccountsCore
-import ClaudeAccountsUI
+import RelevoCore
+import RelevoUI
 import SwiftUI
 
 enum Demo {
@@ -88,7 +88,7 @@ final class Renderer: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
-            let root = FileManager.default.temporaryDirectory.appending(path: "claude-accounts-demo-\(UUID().uuidString)")
+            let root = FileManager.default.temporaryDirectory.appending(path: "relevo-demo-\(UUID().uuidString)")
             defer { try? FileManager.default.removeItem(at: root) }
             do {
                 let store = AccountStore(paths: try Demo.install(in: root), isClaudeRunning: { false })

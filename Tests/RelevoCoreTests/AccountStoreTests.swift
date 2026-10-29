@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import ClaudeAccountsCore
+@testable import RelevoCore
 
 @Suite struct ActiveLocationTests {
     @Test func readsTheLastInitializationAcrossRotatedLogs() throws {

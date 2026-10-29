@@ -2,10 +2,10 @@
   <img src="docs/icon.png" width="128" height="128" alt="App icon">
 </p>
 
-<h1 align="center">Claude Accounts</h1>
+<h1 align="center">Relevo</h1>
 
 <p align="center">
-  Switch Claude Desktop between accounts from the menu bar, take your open
+  A menu bar app for Claude Desktop: switch between accounts, take your open
   sessions with you, and see at a glance which account still has room.
 </p>
 
@@ -34,8 +34,9 @@ account, switching means logging out, logging back in, and losing sight of the
 Code sessions you had open, because Desktop files them under the account that
 created them.
 
-Claude Accounts keeps a saved login per account and swaps them for you: one
-click, no sign-in, and your open sessions come along.
+Relevo keeps a saved login per account and swaps them for you: one click, no
+sign-in, and your open sessions come along. The name is Spanish for the
+handover between shifts, which is what it does with your work.
 
 ## Features
 
@@ -81,8 +82,8 @@ click, no sign-in, and your open sessions come along.
 You need macOS 14 or later, Xcode with Swift 6, and Claude Desktop.
 
 ```bash
-git clone https://github.com/Nico-Sanchez/claude-accounts.git
-cd claude-accounts
+git clone https://github.com/Nico-Sanchez/relevo.git
+cd relevo
 scripts/build-app --install
 ```
 
@@ -96,9 +97,9 @@ the menu bar; turn on **Open at login** from its menu to keep it there.
    signed out; sign in with that account.
 2. **Switch.** Open the menu and click the account you want. Untick any
    sessions you'd rather leave where they are, then **Switch**.
-3. **See usage.** The first time you open the menu, macOS asks whether Claude
-   Accounts may use the `Claude Safe Storage` keychain item. Allow it to see
-   each account's usage; everything else works without it.
+3. **See usage.** The first time you open the menu, macOS asks whether Relevo
+   may use the `Claude Safe Storage` keychain item. Allow it to see each
+   account's usage; everything else works without it.
 
 > [!WARNING]
 > Never use Claude's own **Log out** on an account you want to keep. It ends the
@@ -113,7 +114,7 @@ Claude Desktop keeps its data in `~/Library/Application Support/Claude`.
   plus four keys in `config.json`: `oauth:tokenCache`, `oauth:tokenCacheV2`,
   `lastKnownAccountUuid` and `bootSideSessions`. A switch saves them for the
   current account in
-  `~/Library/Application Support/ClaudeAccounts/profiles/<account>/` and puts
+  `~/Library/Application Support/Relevo/profiles/<account>/` and puts
   the target account's back. The state from before the last switch is kept in
   `backup/`.
 - **Sessions.** Each Code session is a `local_*.json` file under
@@ -161,16 +162,16 @@ language is missing or no longer uses.
 ```bash
 swift test                   # core tests
 scripts/check-localizations  # every language has every key
-scripts/build-app            # build/Claude Accounts.app
+scripts/build-app            # build/Relevo.app
 scripts/build-app --install  # copy to ~/Applications and open it
 scripts/make-screenshots     # regenerate docs/screenshots from demo data
 scripts/make-icon            # regenerate the app icon
 ```
 
-- `Sources/ClaudeAccountsCore`: everything that touches Claude's files, the
+- `Sources/RelevoCore`: everything that touches Claude's files, the
   keychain and claude.ai. No UI and no user-facing text.
-- `Sources/ClaudeAccountsUI`: the SwiftUI menu and its model.
-- `Sources/ClaudeAccounts`: the app entry point.
+- `Sources/RelevoUI`: the SwiftUI menu and its model.
+- `Sources/Relevo`: the app entry point.
 - `Sources/Screenshots`: renders the menu against made-up accounts for this
   README.
 

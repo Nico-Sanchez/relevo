@@ -5,13 +5,13 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Claude Accounts</string>
+	<string>Relevo</string>
 	<key>CFBundleExecutable</key>
-	<string>ClaudeAccounts</string>
+	<string>Relevo</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>dev.nicosanchez.claude-accounts</string>
+	<string>dev.nicosanchez.relevo</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleLocalizations</key>
@@ -20,15 +20,13 @@
 		<string>es</string>
 	</array>
 	<key>CFBundleName</key>
-	<string>Claude Accounts</string>
+	<string>Relevo</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.2.0</string>
+	<string>0.3.0</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
-	<key>LSHasLocalizedDisplayName</key>
-	<true/>
+	<string>3</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>

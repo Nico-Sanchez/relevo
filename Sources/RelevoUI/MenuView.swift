@@ -1,4 +1,4 @@
-import ClaudeAccountsCore
+import RelevoCore
 import SwiftUI
 
 public struct MenuView: View {
@@ -53,7 +53,7 @@ struct HomeView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Claude Accounts")
+            Text(verbatim: "Relevo")
                 .font(.headline)
 
             if let notice = model.notice {

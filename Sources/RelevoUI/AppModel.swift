@@ -1,5 +1,5 @@
 import AppKit
-import ClaudeAccountsCore
+import RelevoCore
 import Observation
 import ServiceManagement
 
@@ -153,7 +153,7 @@ public final class AppModel {
     private func show(_ message: String) {
         NSApp.activate()
         let alert = NSAlert()
-        alert.messageText = String(localized: "Claude Accounts")
+        alert.messageText = "Relevo"
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.runModal()

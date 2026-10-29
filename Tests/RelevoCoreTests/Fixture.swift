@@ -1,7 +1,7 @@
 import CommonCrypto
 import Foundation
 import SQLite3
-@testable import ClaudeAccountsCore
+@testable import RelevoCore
 
 let accountA = "aaaaaaaa-0000-0000-0000-000000000001"
 let accountB = "bbbbbbbb-0000-0000-0000-000000000002"
@@ -31,7 +31,7 @@ final class Fixture {
     let paths: DesktopPaths
 
     init() throws {
-        root = FileManager.default.temporaryDirectory.appending(path: "claude-accounts-\(UUID().uuidString)")
+        root = FileManager.default.temporaryDirectory.appending(path: "relevo-\(UUID().uuidString)")
         paths = DesktopPaths(
             data: root.appending(path: "data"),
             logs: root.appending(path: "logs"),

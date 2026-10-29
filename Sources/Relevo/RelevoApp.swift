@@ -1,8 +1,8 @@
-import ClaudeAccountsUI
+import RelevoUI
 import SwiftUI
 
 @main
-struct ClaudeAccountsApp: App {
+struct RelevoApp: App {
     @State private var model = AppModel()
 
     var body: some Scene {

@@ -149,7 +149,7 @@ public struct AccountStore: Sendable {
         guard account == currentAccount() else {
             return try Cookies.sessionKey(in: paths.profile(account).appending(path: "Cookies"), key: key)
         }
-        let copy = FileManager.default.temporaryDirectory.appending(path: "claude-accounts-\(UUID().uuidString)")
+        let copy = FileManager.default.temporaryDirectory.appending(path: "relevo-\(UUID().uuidString)")
         try Folders.createPrivate(copy)
         defer { try? FileManager.default.removeItem(at: copy) }
         for file in Self.cookieFiles {
