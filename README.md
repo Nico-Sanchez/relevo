@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Nico-Sanchez/relevo/actions/workflows/ci.yml"><img src="https://github.com/Nico-Sanchez/relevo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14+">
   <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
   <img src="https://img.shields.io/badge/languages-English%20%7C%20Espa%C3%B1ol-4B4BC8" alt="English and Spanish">
@@ -154,6 +155,7 @@ anything.
 - Saved logins stay on your Mac, in a folder only your user can read. The
   keychain key and the decrypted cookies are only held in memory.
 - No analytics, no telemetry, no update checks.
+- Found a security problem? See [SECURITY.md](SECURITY.md).
 
 ## Limitations
 
