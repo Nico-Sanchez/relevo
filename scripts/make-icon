@@ -7,4 +7,5 @@ rm -rf "$iconset"
 mkdir -p build
 swift scripts/make-icon.swift "$iconset"
 iconutil -c icns "$iconset" -o Resources/AppIcon.icns
-echo Resources/AppIcon.icns
+cp "$iconset/icon_128x128@2x.png" docs/icon.png
+echo Resources/AppIcon.icns docs/icon.png

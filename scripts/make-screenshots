@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+bundle="build/Screenshots.app"
+
+swift build --product Screenshots
+rm -rf "$bundle"
+mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources" docs/screenshots
+cp "$(swift build --show-bin-path)/Screenshots" "$bundle/Contents/MacOS/Screenshots"
+sed -e 's#<string>ClaudeAccounts</string>#<string>Screenshots</string>#' \
+    -e 's#claude-accounts</string>#claude-accounts.screenshots</string>#' \
+    Resources/Info.plist > "$bundle/Contents/Info.plist"
+cp -R Resources/Localization/*.lproj "$bundle/Contents/Resources/"
+
+"$bundle/Contents/MacOS/Screenshots" docs/screenshots en menu switch add -AppleLanguages '(en)'
+"$bundle/Contents/MacOS/Screenshots" docs/screenshots es menu -AppleLanguages '(es)'
+ls docs/screenshots

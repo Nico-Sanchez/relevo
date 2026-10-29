@@ -60,11 +60,22 @@ public struct UsageWindow: Hashable, Sendable, Identifiable {
     public let id: String
     public let utilization: Double
     public let resetsAt: Date?
+
+    public init(id: String, utilization: Double, resetsAt: Date?) {
+        self.id = id
+        self.utilization = utilization
+        self.resetsAt = resetsAt
+    }
 }
 
 public struct Usage: Hashable, Sendable {
     public let windows: [UsageWindow]
     public let fetchedAt: Date
+
+    public init(windows: [UsageWindow], fetchedAt: Date) {
+        self.windows = windows
+        self.fetchedAt = fetchedAt
+    }
 
     public func window(_ id: String) -> UsageWindow? {
         windows.first { $0.id == id }

@@ -12,9 +12,17 @@ let package = Package(
             name: "ClaudeAccountsCore",
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
+        .target(
+            name: "ClaudeAccountsUI",
+            dependencies: ["ClaudeAccountsCore"]
+        ),
         .executableTarget(
             name: "ClaudeAccounts",
-            dependencies: ["ClaudeAccountsCore"]
+            dependencies: ["ClaudeAccountsUI"]
+        ),
+        .executableTarget(
+            name: "Screenshots",
+            dependencies: ["ClaudeAccountsCore", "ClaudeAccountsUI"]
         ),
         .testTarget(
             name: "ClaudeAccountsCoreTests",

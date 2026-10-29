@@ -116,3 +116,41 @@ public struct UsageClient: Sendable {
         return ISO8601DateFormatter().date(from: withoutFraction)
     }
 }
+
+public struct UsageSource: Sendable {
+    public let prepare: @Sendable () async throws -> Void
+    public let fetch: @Sendable (Account) async throws -> Usage
+
+    public init(
+        prepare: @escaping @Sendable () async throws -> Void,
+        fetch: @escaping @Sendable (Account) async throws -> Usage
+    ) {
+        self.prepare = prepare
+        self.fetch = fetch
+    }
+
+    public static func claudeAI(store: AccountStore, client: UsageClient = UsageClient()) -> UsageSource {
+        let key = KeyCache()
+        return UsageSource(
+            prepare: { _ = try await key.value() },
+            fetch: { account in
+                guard let location = account.location else { throw UsageError.noSession }
+                let sessionKey = try store.sessionKey(for: account.id, decryptingWith: try await key.value())
+                return try await client.usage(at: location, sessionKey: sessionKey)
+            }
+        )
+    }
+}
+
+actor KeyCache {
+    private var key: Data?
+
+    func value() throws -> Data {
+        if let key {
+            return key
+        }
+        let derived = try SafeStorage.key()
+        key = derived
+        return derived
+    }
+}

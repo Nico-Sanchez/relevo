@@ -11,59 +11,62 @@ enum UsageState: Equatable, Sendable {
 
 @MainActor
 @Observable
-final class AppModel {
-    enum Screen: Equatable {
+public final class AppModel {
+    public enum Screen: Equatable {
         case home
         case switching(Account)
         case adding
         case bringing
     }
 
-    let store = AccountStore()
-    let usageClient = UsageClient()
-    var snapshot = Snapshot.empty
-    var screen = Screen.home
+    let store: AccountStore
+    let usageSource: UsageSource
+    public internal(set) var snapshot = Snapshot.empty
+    public var screen = Screen.home
     var progress: String?
     var notice: String?
     var opensAtLogin = SMAppService.mainApp.status == .enabled
     var usage: [String: UsageState] = [:]
     var usageUpdatedAt: Date?
     var needsKeychainAccess = false
-    private var storageKey: Data?
+
+    public init(store: AccountStore = AccountStore(), usageSource: UsageSource? = nil) {
+        self.store = store
+        self.usageSource = usageSource ?? .claudeAI(store: store)
+    }
 
     private var names: [String: String] {
         Dictionary(snapshot.accounts.map { ($0.id, $0.displayName) }, uniquingKeysWith: { first, _ in first })
     }
 
-    func refresh() async {
+    public func refresh() async {
         let store = store
         snapshot = await Task.detached { store.snapshot() }.value
     }
 
-    func refreshUsage(force: Bool = false) async {
+    public func refreshUsage(force: Bool = false) async {
         if !force, let usageUpdatedAt, Date.now.timeIntervalSince(usageUpdatedAt) < 60 { return }
         let accounts = snapshot.accounts.filter { $0.location != nil }
         guard !accounts.isEmpty else { return }
         usageUpdatedAt = .now
-        if storageKey == nil {
-            storageKey = try? await Task.detached { try SafeStorage.key() }.value
+        do {
+            try await usageSource.prepare()
+            needsKeychainAccess = false
+        } catch {
+            needsKeychainAccess = true
+            return
         }
-        needsKeychainAccess = storageKey == nil
-        guard let key = storageKey else { return }
 
         for account in accounts where usage[account.id] == nil {
             usage[account.id] = .loading
         }
-        let store = store
-        let client = usageClient
+        let source = usageSource
         let names = names
         await withTaskGroup(of: (String, UsageState).self) { group in
             for account in accounts {
-                guard let location = account.location else { continue }
                 group.addTask {
                     do {
-                        let sessionKey = try store.sessionKey(for: account.id, decryptingWith: key)
-                        return (account.id, .loaded(try await client.usage(at: location, sessionKey: sessionKey)))
+                        return (account.id, .loaded(try await source.fetch(account)))
                     } catch {
                         return (account.id, .failed(Display.message(for: error, names: names)))
                     }

@@ -1,10 +1,14 @@
 import ClaudeAccountsCore
 import SwiftUI
 
-struct MenuView: View {
+public struct MenuView: View {
     @Bindable var model: AppModel
 
-    var body: some View {
+    public init(model: AppModel) {
+        self.model = model
+    }
+
+    public var body: some View {
         Group {
             if let progress = model.progress {
                 HStack(spacing: 10) {
