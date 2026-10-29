@@ -13,6 +13,7 @@
   <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple" alt="macOS 14+">
   <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
   <img src="https://img.shields.io/badge/languages-English%20%7C%20Espa%C3%B1ol-4B4BC8" alt="English and Spanish">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license">
 </p>
 
 <p align="center">
@@ -174,6 +175,10 @@ scripts/make-icon            # regenerate the app icon
 - `Sources/Relevo`: the app entry point.
 - `Sources/Screenshots`: renders the menu against made-up accounts for this
   README.
+
+## License
+
+[MIT](LICENSE)
 
 ---
 
