@@ -81,7 +81,32 @@ handover between shifts, which is what it does with your work.
 
 ## Install
 
-You need macOS 14 or later, Xcode with Swift 6, and Claude Desktop.
+### Download
+
+1. Download **Relevo.zip** from the
+   [latest release](https://github.com/Nico-Sanchez/relevo/releases/latest),
+   unzip it and move **Relevo.app** to your Applications folder.
+2. Open it. Relevo isn't notarized, so macOS blocks it the first time: open
+   **System Settings › Privacy & Security**, scroll to the message about Relevo
+   and click **Open Anyway**.
+
+It runs on macOS 14 or later, on Apple silicon and Intel, and lives in the
+menu bar; turn on **Open at login** from its menu to keep it there. Every
+release is built by this repository's CI, and you can check that a download
+came from it:
+
+```bash
+shasum -a 256 -c Relevo.zip.sha256
+gh attestation verify Relevo.zip -R Nico-Sanchez/relevo
+```
+
+To update, replace the app with the new one. Because it isn't notarized, macOS
+asks again for the keychain permission after each update if **Show usage** is
+on.
+
+### Build from source
+
+You need Xcode with Swift 6.
 
 ```bash
 git clone https://github.com/Nico-Sanchez/relevo.git
@@ -89,8 +114,7 @@ cd relevo
 scripts/build-app --install
 ```
 
-That builds the app, copies it to `~/Applications` and opens it. It lives in
-the menu bar; turn on **Open at login** from its menu to keep it there.
+That builds the app, copies it to `~/Applications` and opens it.
 
 ## Using it
 
@@ -164,7 +188,8 @@ anything.
 - A saved login expires like any other (about a month); Claude then asks you to
   sign in, and the next switch saves the new login.
 - Sidebar pins and groups may not follow a moved session.
-- The app is built locally and signed ad hoc; there's no notarized download yet.
+- Releases are signed ad hoc, not notarized, so macOS asks you to approve the
+  first launch.
 
 ## Localization
 
@@ -176,12 +201,13 @@ language is missing or no longer uses.
 ## Development
 
 ```bash
-swift test                   # core tests
-scripts/check-localizations  # every language has every key
-scripts/build-app            # build/Relevo.app
-scripts/build-app --install  # copy to ~/Applications and open it
-scripts/make-screenshots     # regenerate docs/screenshots from demo data
-scripts/make-icon            # regenerate the app icon
+swift test                     # core and model tests
+scripts/check-localizations    # every language has every key
+scripts/build-app              # build/Relevo.app
+scripts/build-app --install    # copy to ~/Applications and open it
+scripts/build-app --universal  # Apple silicon and Intel, like releases
+scripts/make-screenshots       # regenerate docs/screenshots from demo data
+scripts/make-icon              # regenerate the app icon
 ```
 
 - `Sources/RelevoCore`: everything that touches Claude's files, the
@@ -190,6 +216,10 @@ scripts/make-icon            # regenerate the app icon
 - `Sources/Relevo`: the app entry point.
 - `Sources/Screenshots`: renders the menu against made-up accounts for this
   README.
+
+Pushing a `v*` tag that matches `CFBundleShortVersionString` in
+`Resources/Info.plist` makes the Release workflow build the universal app,
+attest it and publish it with its SHA-256.
 
 ## License
 

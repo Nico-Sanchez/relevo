@@ -4,9 +4,19 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 name="Relevo"
 app="build/$name.app"
+install=false
+architectures=()
 
-swift build -c release --product Relevo
-binary="$(swift build -c release --show-bin-path)/Relevo"
+for argument in "$@"; do
+    case "$argument" in
+        --install) install=true ;;
+        --universal) architectures=(--arch arm64 --arch x86_64) ;;
+        *) echo "usage: scripts/build-app [--universal] [--install]" >&2; exit 64 ;;
+    esac
+done
+
+swift build -c release --product Relevo ${architectures[@]+"${architectures[@]}"}
+binary="$(swift build -c release --show-bin-path ${architectures[@]+"${architectures[@]}"})/Relevo"
 
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
@@ -16,7 +26,7 @@ cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 cp -R Resources/Localization/*.lproj "$app/Contents/Resources/"
 codesign --force --sign - "$app"
 
-if [[ "${1:-}" == "--install" ]]; then
+if $install; then
     pkill -x Relevo || true
     rm -rf "$HOME/Applications/$name.app"
     mkdir -p "$HOME/Applications"
