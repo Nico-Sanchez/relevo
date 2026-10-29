@@ -1,0 +1,27 @@
+#!/bin/bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+name="Cuentas de Claude"
+app="build/$name.app"
+
+swift build -c release --product ClaudeAccounts
+binary="$(swift build -c release --show-bin-path)/ClaudeAccounts"
+
+rm -rf "$app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp "$binary" "$app/Contents/MacOS/ClaudeAccounts"
+cp Resources/Info.plist "$app/Contents/Info.plist"
+cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
+codesign --force --sign - "$app"
+
+if [[ "${1:-}" == "--install" ]]; then
+    pkill -x ClaudeAccounts || true
+    rm -rf "$HOME/Applications/$name.app"
+    mkdir -p "$HOME/Applications"
+    cp -R "$app" "$HOME/Applications/"
+    open "$HOME/Applications/$name.app"
+    echo "$HOME/Applications/$name.app"
+else
+    echo "$app"
+fi
