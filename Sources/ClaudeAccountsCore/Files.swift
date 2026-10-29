@@ -61,4 +61,41 @@ enum Cookies {
         guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK else { return false }
         return sqlite3_step(statement) == SQLITE_ROW && sqlite3_column_int(statement, 0) > 0
     }
+
+    static func sessionKey(in url: URL, key: Data) throws -> String {
+        var database: OpaquePointer?
+        defer { sqlite3_close(database) }
+        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { throw UsageError.noSession }
+        let version = Int(text(database, "select value from meta where key = 'version'") ?? "") ?? 0
+
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+        let query = """
+            select value, encrypted_value from cookies
+            where name = 'sessionKey' and host_key like '%claude.ai'
+            order by host_key = '.claude.ai' desc limit 1
+            """
+        guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK,
+              sqlite3_step(statement) == SQLITE_ROW else { throw UsageError.noSession }
+        if let plain = sqlite3_column_text(statement, 0), plain.pointee != 0 {
+            return String(cString: plain)
+        }
+        guard let bytes = sqlite3_column_blob(statement, 1) else { throw UsageError.noSession }
+        let encrypted = Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, 1)))
+        var decrypted = try SafeStorage.decrypt(encrypted, key: key)
+        if version >= 24 {
+            decrypted = decrypted.dropFirst(32)
+        }
+        guard let value = String(data: decrypted, encoding: .utf8), !value.isEmpty else { throw UsageError.unreadable }
+        return value
+    }
+
+    private static func text(_ database: OpaquePointer?, _ query: String) -> String? {
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK,
+              sqlite3_step(statement) == SQLITE_ROW,
+              let value = sqlite3_column_text(statement, 0) else { return nil }
+        return String(cString: value)
+    }
 }

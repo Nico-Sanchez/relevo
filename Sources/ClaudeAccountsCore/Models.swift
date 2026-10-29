@@ -21,7 +21,7 @@ public struct Location: Hashable, Sendable, CustomStringConvertible {
 
 public struct Account: Hashable, Sendable, Identifiable {
     public let id: String
-    public let name: String
+    public let name: String?
     public let location: Location?
     public let orgName: String?
 }
@@ -31,6 +31,8 @@ public struct Snapshot: Sendable {
     public let others: [Account]
 
     public static let empty = Snapshot(current: nil, others: [])
+
+    public var accounts: [Account] { (current.map { [$0] } ?? []) + others }
 }
 
 public struct SessionSummary: Hashable, Sendable, Identifiable {
@@ -42,7 +44,8 @@ public struct SessionSummary: Hashable, Sendable, Identifiable {
 
 public struct SessionGroup: Hashable, Sendable, Identifiable {
     public let location: Location
-    public let name: String
+    public let accountName: String?
+    public let orgName: String?
     public let sessions: [SessionSummary]
 
     public var id: String { location.description }
@@ -53,30 +56,35 @@ public struct BringResult: Equatable, Sendable {
     public let kept: Int
 }
 
-public enum AccountError: LocalizedError, Equatable {
+public struct UsageWindow: Hashable, Sendable, Identifiable {
+    public let id: String
+    public let utilization: Double
+    public let resetsAt: Date?
+}
+
+public struct Usage: Hashable, Sendable {
+    public let windows: [UsageWindow]
+    public let fetchedAt: Date
+
+    public func window(_ id: String) -> UsageWindow? {
+        windows.first { $0.id == id }
+    }
+}
+
+public enum AccountError: Error, Equatable {
     case claudeRunning
     case alreadyCurrent(String)
     case noSavedLogin(String)
     case notSignedInto(String)
     case invalidAccount(String)
     case unreadableConfig
+}
 
-    public var errorDescription: String? {
-        switch self {
-        case .claudeRunning:
-            "Claude sigue abierto. No cambié nada."
-        case .alreadyCurrent(let name):
-            "Ya estás en \(name)."
-        case .noSavedLogin(let name):
-            "No tengo guardado el login de \(name)."
-        case .notSignedInto(let name):
-            "Claude no está en \(name). No moví ninguna sesión."
-        case .invalidAccount(let account):
-            "Cuenta inválida: \(account)."
-        case .unreadableConfig:
-            "No pude leer la configuración de Claude. No cambié nada."
-        }
-    }
+public enum UsageError: Error, Equatable {
+    case keychainDenied
+    case noSession
+    case http(Int)
+    case unreadable
 }
 
 func isIdentifier(_ value: String) -> Bool {

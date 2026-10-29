@@ -141,8 +141,8 @@ import Testing
         #expect(throws: AccountError.claudeRunning) {
             try fixture.store(claudeRunning: true).switchToNewAccount(named: "x")
         }
-        #expect(throws: AccountError.alreadyCurrent("Cuenta aaaaaaaa")) { try store.switchTo(accountA) }
-        #expect(throws: AccountError.noSavedLogin("Cuenta cccccccc")) { try store.switchTo(accountC) }
+        #expect(throws: AccountError.alreadyCurrent(accountA)) { try store.switchTo(accountA) }
+        #expect(throws: AccountError.noSavedLogin(accountC)) { try store.switchTo(accountC) }
         #expect(throws: AccountError.invalidAccount("../x")) { try store.switchTo("../x") }
         #expect(fixture.cookieSession() == "A")
         #expect(!FileManager.default.fileExists(atPath: fixture.paths.storage.path))
@@ -202,7 +202,8 @@ import Testing
         #expect(groups.map(\.location) == [location(accountA, orgC), location(accountB, orgB)])
         #expect(groups[1].sessions.map(\.id) == ["local_b2", "local_b1"])
         #expect(groups[1].sessions[0].title == "Con tab y salto")
-        #expect(groups[1].name == "Cuenta bbbbbbbb · org 22222222")
+        #expect(groups[1].accountName == nil)
+        #expect(groups[1].orgName == nil)
     }
 
     @Test func bringingMovesTheChosenSessionsAndKeepsDuplicates() throws {
@@ -234,7 +235,7 @@ import Testing
         #expect(throws: AccountError.claudeRunning) {
             try fixture.store(claudeRunning: true).bring(sessions, to: location(accountA, orgA))
         }
-        #expect(throws: AccountError.notSignedInto("Cuenta cccccccc")) {
+        #expect(throws: AccountError.notSignedInto(accountC)) {
             try store.bring(sessions, to: location(accountC, orgC))
         }
         #expect(fixture.sessionFiles() == ["\(accountB)/\(orgB)/local_b1.json"])

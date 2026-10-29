@@ -1,3 +1,4 @@
+import CommonCrypto
 import Foundation
 import SQLite3
 @testable import ClaudeAccountsCore
@@ -14,6 +15,16 @@ func location(_ account: String, _ org: String) -> Location {
 }
 
 struct FixtureError: Error {}
+
+func sha256(_ data: Data) -> Data {
+    var digest = Data(count: Int(CC_SHA256_DIGEST_LENGTH))
+    digest.withUnsafeMutableBytes { digestBytes in
+        data.withUnsafeBytes { dataBytes in
+            _ = CC_SHA256(dataBytes.baseAddress, CC_LONG(data.count), digestBytes.baseAddress?.assumingMemoryBound(to: UInt8.self))
+        }
+    }
+    return digest
+}
 
 final class Fixture {
     let root: URL
@@ -47,15 +58,20 @@ final class Fixture {
         try writeCookies(session: session)
     }
 
-    func writeCookies(session: String?) throws {
+    func writeCookies(session: String?, encryptedWith key: Data? = nil) throws {
         try? FileManager.default.removeItem(at: paths.cookies)
         var database: OpaquePointer?
         defer { sqlite3_close(database) }
         guard sqlite3_open(paths.cookies.path, &database) == SQLITE_OK else { throw FixtureError() }
-        var statements = "create table cookies(host_key text, name text, value text);"
-        statements += "insert into cookies values('.claude.ai', 'lastActiveOrg', 'org');"
-        if let session {
-            statements += "insert into cookies values('.claude.ai', 'sessionKey', '\(session)');"
+        var statements = "create table meta(key text, value text); insert into meta values('version', '24');"
+        statements += "create table cookies(host_key text, name text, value text, encrypted_value blob);"
+        statements += "insert into cookies values('.claude.ai', 'lastActiveOrg', 'org', x'');"
+        if let session, let key {
+            let plaintext = sha256(Data(".claude.ai".utf8)) + Data(session.utf8)
+            let hex = try SafeStorage.encrypt(plaintext, key: key).map { String(format: "%02x", $0) }.joined()
+            statements += "insert into cookies values('.claude.ai', 'sessionKey', '', x'\(hex)');"
+        } else if let session {
+            statements += "insert into cookies values('.claude.ai', 'sessionKey', '\(session)', x'');"
         }
         guard sqlite3_exec(database, statements, nil, nil, nil) == SQLITE_OK else { throw FixtureError() }
         FileManager.default.createFile(atPath: paths.data.appending(path: "Cookies-journal").path, contents: Data())

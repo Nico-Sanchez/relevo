@@ -11,22 +11,24 @@ struct SessionPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            BackHeader(title: switching ? "Cambiar a \(destination.name)" : "Traer sesiones") { model.screen = .home }
-            Text(switching ? "Claude se cierra y se vuelve a abrir con esta cuenta." : "Claude se cierra y se vuelve a abrir.")
+            BackHeader(title: switching ? String(localized: "Switch to \(destination.displayName)") : String(localized: "Bring sessions")) {
+                model.screen = .home
+            }
+            Text(switching ? "Claude quits and reopens with this account." : "Claude quits and reopens.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             if destination.location == nil {
-                Text("Todavía no sé en qué organización está esta cuenta. Vas a poder traer sesiones después de entrar.")
+                Text("I don't know this account's organization yet. You can bring sessions after signing in.")
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
             } else if let groups {
                 if groups.isEmpty {
-                    Text("No hay sesiones abiertas en otras cuentas.")
+                    Text("No open sessions in other accounts.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("¿Qué sesiones abiertas llevo a \(destination.name)?")
+                    Text("Which open sessions should I bring to \(destination.displayName)?")
                         .font(.callout)
                     ScrollView {
                         VStack(alignment: .leading, spacing: 10) {
@@ -64,9 +66,9 @@ struct SessionPicker: View {
 
     private var primaryTitle: String {
         switch (switching, selected.count) {
-        case (true, 0): "Cambiar"
-        case (true, let count): "Cambiar y llevar \(count)"
-        case (false, let count): "Traer \(count)"
+        case (true, 0): String(localized: "Switch")
+        case (true, let count): String(localized: "Switch and bring \(count)")
+        case (false, let count): String(localized: "Bring \(count)")
         }
     }
 
@@ -94,7 +96,7 @@ struct SessionPicker: View {
                         }
                     )) {
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(session.title)
+                            Text(session.displayTitle)
                                 .lineLimit(1)
                             Text(session.lastActivity, format: .relative(presentation: .named))
                                 .font(.caption2)
@@ -118,7 +120,7 @@ struct SessionPicker: View {
                     }
                 }
             )) {
-                Text("\(group.name) (\(group.sessions.count))")
+                Text(verbatim: "\(group.displayName) (\(group.sessions.count))")
                     .font(.caption.weight(.semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)

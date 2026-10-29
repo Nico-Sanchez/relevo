@@ -2,7 +2,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-name="Cuentas de Claude"
+name="Claude Accounts"
 app="build/$name.app"
 
 swift build -c release --product ClaudeAccounts
@@ -13,6 +13,7 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$binary" "$app/Contents/MacOS/ClaudeAccounts"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
+cp -R Resources/Localization/*.lproj "$app/Contents/Resources/"
 codesign --force --sign - "$app"
 
 if [[ "${1:-}" == "--install" ]]; then

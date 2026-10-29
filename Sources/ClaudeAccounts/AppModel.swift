@@ -3,6 +3,12 @@ import ClaudeAccountsCore
 import Observation
 import ServiceManagement
 
+enum UsageState: Equatable, Sendable {
+    case loading
+    case loaded(Usage)
+    case failed(String)
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -14,15 +20,60 @@ final class AppModel {
     }
 
     let store = AccountStore()
+    let usageClient = UsageClient()
     var snapshot = Snapshot.empty
     var screen = Screen.home
     var progress: String?
     var notice: String?
     var opensAtLogin = SMAppService.mainApp.status == .enabled
+    var usage: [String: UsageState] = [:]
+    var usageUpdatedAt: Date?
+    var needsKeychainAccess = false
+    private var storageKey: Data?
+
+    private var names: [String: String] {
+        Dictionary(snapshot.accounts.map { ($0.id, $0.displayName) }, uniquingKeysWith: { first, _ in first })
+    }
 
     func refresh() async {
         let store = store
         snapshot = await Task.detached { store.snapshot() }.value
+    }
+
+    func refreshUsage(force: Bool = false) async {
+        if !force, let usageUpdatedAt, Date.now.timeIntervalSince(usageUpdatedAt) < 60 { return }
+        let accounts = snapshot.accounts.filter { $0.location != nil }
+        guard !accounts.isEmpty else { return }
+        usageUpdatedAt = .now
+        if storageKey == nil {
+            storageKey = try? await Task.detached { try SafeStorage.key() }.value
+        }
+        needsKeychainAccess = storageKey == nil
+        guard let key = storageKey else { return }
+
+        for account in accounts where usage[account.id] == nil {
+            usage[account.id] = .loading
+        }
+        let store = store
+        let client = usageClient
+        let names = names
+        await withTaskGroup(of: (String, UsageState).self) { group in
+            for account in accounts {
+                guard let location = account.location else { continue }
+                group.addTask {
+                    do {
+                        let sessionKey = try store.sessionKey(for: account.id, decryptingWith: key)
+                        return (account.id, .loaded(try await client.usage(at: location, sessionKey: sessionKey)))
+                    } catch {
+                        return (account.id, .failed(Display.message(for: error, names: names)))
+                    }
+                }
+            }
+            for await (id, state) in group {
+                usage[id] = state
+            }
+        }
+        usageUpdatedAt = .now
     }
 
     func sessionGroups(excluding target: Location) async -> [SessionGroup] {
@@ -31,23 +82,25 @@ final class AppModel {
     }
 
     func switchTo(_ account: Account, bringing sessions: [SessionSummary]) async {
-        await run(working: "Cambiando a \(account.name)…") { store in
+        let name = account.displayName
+        await run(working: String(localized: "Switching to \(name)…")) { store in
             try store.switchTo(account.id)
-            guard let target = account.location, !sessions.isEmpty else { return "Pasaste a \(account.name)." }
-            return "Pasaste a \(account.name). \(try store.bring(sessions, to: target).summary)"
+            let switched = String(localized: "Switched to \(name).")
+            guard let target = account.location, !sessions.isEmpty else { return switched }
+            return switched + " " + Display.summary(of: try store.bring(sessions, to: target))
         }
     }
 
     func addAccount(named name: String) async {
-        await run(working: "Guardando el login actual…") { store in
+        await run(working: String(localized: "Saving the current login…")) { store in
             try store.switchToNewAccount(named: name)
-            return "Claude abrió sin sesión: entrá con \(name)."
+            return String(localized: "Claude opened signed out: sign in with \(name).")
         }
     }
 
     func bring(_ sessions: [SessionSummary], to target: Location) async {
-        await run(working: "Moviendo sesiones…") { store in
-            try store.bring(sessions, to: target).summary
+        await run(working: String(localized: "Moving sessions…")) { store in
+            Display.summary(of: try store.bring(sessions, to: target))
         }
     }
 
@@ -74,10 +127,10 @@ final class AppModel {
     }
 
     private func run(working message: String, _ operation: @escaping @Sendable (AccountStore) throws -> String) async {
-        progress = "Cerrando Claude…"
+        progress = String(localized: "Quitting Claude…")
         defer { progress = nil }
         guard await ClaudeApp.quit() else {
-            show("Claude no se cerró. No cambié nada.")
+            show(String(localized: "Claude didn't quit. Nothing changed."))
             return
         }
         progress = message
@@ -89,7 +142,7 @@ final class AppModel {
         case .success(let summary):
             notice = summary
         case .failure(let error):
-            show(error.localizedDescription)
+            show(Display.message(for: error, names: names))
         }
         await refresh()
     }
@@ -97,7 +150,7 @@ final class AppModel {
     private func show(_ message: String) {
         NSApp.activate()
         let alert = NSAlert()
-        alert.messageText = "Cuentas de Claude"
+        alert.messageText = String(localized: "Claude Accounts")
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.runModal()
@@ -119,17 +172,5 @@ enum ClaudeApp {
     static func launch() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: AccountStore.claudeBundleIdentifier) else { return }
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
-    }
-}
-
-extension BringResult {
-    var summary: String {
-        var text = moved == 1 ? "Traje 1 sesión." : "Traje \(moved) sesiones."
-        if kept == 1 {
-            text += " 1 ya estaba ahí con el mismo id y no la toqué."
-        } else if kept > 1 {
-            text += " \(kept) ya estaban ahí con el mismo id y no las toqué."
-        }
-        return text
     }
 }

@@ -30,7 +30,7 @@ public struct AccountStore: Sendable {
         let others = savedAccounts()
             .filter { $0 != current }
             .map { account(for: $0, location: savedLocation(of: $0), book: book) }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            .sorted { ($0.name ?? $0.id).localizedStandardCompare($1.name ?? $1.id) == .orderedAscending }
         return Snapshot(current: current.map { account(for: $0, location: location, book: book) }, others: others)
     }
 
@@ -65,7 +65,12 @@ public struct AccountStore: Sendable {
                       location != target else { continue }
                 let sessions = openSessions(at: location)
                 if !sessions.isEmpty {
-                    groups.append(SessionGroup(location: location, name: name(of: location, book: book), sessions: sessions))
+                    groups.append(SessionGroup(
+                        location: location,
+                        accountName: book.accounts[location.account],
+                        orgName: book.orgs[location.org],
+                        sessions: sessions
+                    ))
                 }
             }
         }
@@ -74,7 +79,7 @@ public struct AccountStore: Sendable {
 
     public func bring(_ sessions: [SessionSummary], to target: Location) throws -> BringResult {
         guard !isClaudeRunning() else { throw AccountError.claudeRunning }
-        guard currentAccount() == target.account else { throw AccountError.notSignedInto(name(of: target.account)) }
+        guard currentAccount() == target.account else { throw AccountError.notSignedInto(target.account) }
         let files = FileManager.default
         let destination = paths.sessions(at: target)
         try files.createDirectory(at: destination, withIntermediateDirectories: true)
@@ -100,10 +105,10 @@ public struct AccountStore: Sendable {
         guard isIdentifier(account) else { throw AccountError.invalidAccount(account) }
         try requireClosedAndReadableConfig()
         resolvePendingName()
-        guard account != currentAccount() else { throw AccountError.alreadyCurrent(name(of: account)) }
+        guard account != currentAccount() else { throw AccountError.alreadyCurrent(account) }
         let profile = paths.profile(account)
         guard let auth = JSONFile.readIfPresent(profile.appending(path: "profile.json"))?["auth"] as? [String: Any] else {
-            throw AccountError.noSavedLogin(name(of: account))
+            throw AccountError.noSavedLogin(account)
         }
         try backUpLogin()
         try saveCurrentLogin()
@@ -136,8 +141,21 @@ public struct AccountStore: Sendable {
         try save(book)
     }
 
-    public func name(of account: String) -> String {
-        name(of: account, book: labelBook())
+    public func name(of account: String) -> String? {
+        labelBook().accounts[account]
+    }
+
+    public func sessionKey(for account: String, decryptingWith key: Data) throws -> String {
+        guard account == currentAccount() else {
+            return try Cookies.sessionKey(in: paths.profile(account).appending(path: "Cookies"), key: key)
+        }
+        let copy = FileManager.default.temporaryDirectory.appending(path: "claude-accounts-\(UUID().uuidString)")
+        try Folders.createPrivate(copy)
+        defer { try? FileManager.default.removeItem(at: copy) }
+        for file in Self.cookieFiles {
+            try Folders.copyOrRemove(paths.data.appending(path: file), to: copy.appending(path: file))
+        }
+        return try Cookies.sessionKey(in: copy.appending(path: "Cookies"), key: key)
     }
 
     static func lastInitialization(in text: String) -> Location? {
@@ -170,7 +188,7 @@ public struct AccountStore: Sendable {
         let milliseconds = (session["lastActivityAt"] as? NSNumber)?.doubleValue ?? 0
         return SessionSummary(
             id: file.deletingPathExtension().lastPathComponent,
-            title: title.isEmpty ? "Sin título" : title,
+            title: title,
             lastActivity: Date(timeIntervalSince1970: milliseconds / 1000),
             file: file
         )
@@ -249,20 +267,8 @@ public struct AccountStore: Sendable {
         try? save(book)
     }
 
-    func name(of account: String, book: LabelBook) -> String {
-        book.accounts[account] ?? "Cuenta \(account.prefix(8))"
-    }
-
-    func name(of location: Location, book: LabelBook) -> String {
-        "\(name(of: location.account, book: book)) · \(orgName(location.org, book: book))"
-    }
-
-    func orgName(_ org: String, book: LabelBook) -> String {
-        book.orgs[org] ?? "org \(org.prefix(8))"
-    }
-
     func account(for id: String, location: Location?, book: LabelBook) -> Account {
-        Account(id: id, name: name(of: id, book: book), location: location, orgName: location.map { orgName($0.org, book: book) })
+        Account(id: id, name: book.accounts[id], location: location, orgName: location.flatMap { book.orgs[$0.org] })
     }
 
     private func modificationDate(_ url: URL) -> Date {

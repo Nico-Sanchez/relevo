@@ -4,20 +4,23 @@ import SwiftUI
 struct AccountRow: View {
     let account: Account
     let isCurrent: Bool
+    let usage: UsageState?
     var rename: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: 10) {
-            Avatar(name: account.name, seed: account.id)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(account.name)
+        HStack(alignment: .top, spacing: 10) {
+            Avatar(name: account.displayName, seed: account.id)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(account.displayName)
                     .fontWeight(isCurrent ? .semibold : .regular)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(account.orgName ?? "Organización desconocida")
+                Text(account.displayOrg)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                UsageMeters(state: usage)
+                    .padding(.top, 2)
             }
             Spacer(minLength: 0)
             if let rename {
@@ -25,7 +28,7 @@ struct AccountRow: View {
                     Image(systemName: "pencil")
                 }
                 .buttonStyle(.borderless)
-                .help("Cambiar el nombre")
+                .help(Text("Rename"))
             }
             Image(systemName: isCurrent ? "checkmark.circle.fill" : "chevron.right")
                 .foregroundStyle(isCurrent ? AnyShapeStyle(.green) : AnyShapeStyle(.tertiary))
@@ -33,6 +36,74 @@ struct AccountRow: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 8)
         .contentShape(Rectangle())
+    }
+}
+
+struct UsageMeters: View {
+    static let mainWindows: Set<String> = ["five_hour", "seven_day"]
+
+    let state: UsageState?
+
+    var body: some View {
+        switch state {
+        case .loaded(let usage):
+            Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 2) {
+                ForEach(shown(usage)) { window in
+                    GridRow {
+                        Text(Display.windowName(window.id))
+                            .foregroundStyle(.secondary)
+                        Capsule()
+                            .fill(.quaternary)
+                            .frame(height: 4)
+                            .overlay(alignment: .leading) {
+                                GeometryReader { proxy in
+                                    Capsule()
+                                        .fill(color(for: window))
+                                        .frame(width: proxy.size.width * min(max(window.utilization / 100, 0), 1))
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        Text(verbatim: "\(Int(window.utilization.rounded()))%")
+                            .monospacedDigit()
+                            .gridColumnAlignment(.trailing)
+                    }
+                    .help(resetText(for: window))
+                }
+            }
+            .font(.caption2)
+        case .loading:
+            ProgressView()
+                .controlSize(.mini)
+        case .failed(let message):
+            Text(message)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help(message)
+        case nil:
+            EmptyView()
+        }
+    }
+
+    private func shown(_ usage: Usage) -> [UsageWindow] {
+        let main = usage.windows.filter { Self.mainWindows.contains($0.id) }
+        let busiestOther = usage.windows
+            .filter { !Self.mainWindows.contains($0.id) && $0.utilization > 0 }
+            .max { $0.utilization < $1.utilization }
+        return main + (busiestOther.map { [$0] } ?? [])
+    }
+
+    private func color(for window: UsageWindow) -> Color {
+        switch window.utilization {
+        case 90...: .red
+        case 70...: .orange
+        default: .green
+        }
+    }
+
+    private func resetText(for window: UsageWindow) -> Text {
+        guard let resetsAt = window.resetsAt else { return Text(verbatim: "") }
+        return Text("Resets \(resetsAt.formatted(.relative(presentation: .named)))")
     }
 }
 
@@ -48,7 +119,7 @@ struct Avatar: View {
             .fill(Self.palette[index].gradient)
             .frame(width: 30, height: 30)
             .overlay {
-                Text(String(name.first(where: \.isLetter) ?? "?").uppercased())
+                Text(verbatim: String(name.first(where: \.isLetter) ?? "?").uppercased())
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
             }
@@ -56,7 +127,7 @@ struct Avatar: View {
 }
 
 struct MenuRow: View {
-    let title: String
+    let title: LocalizedStringKey
     let systemImage: String
     let action: () -> Void
 
@@ -95,10 +166,11 @@ struct RowButtonStyle: ButtonStyle {
 }
 
 struct SectionTitle: View {
-    let text: String
+    let title: LocalizedStringKey
 
     var body: some View {
-        Text(text.uppercased())
+        Text(title)
+            .textCase(.uppercase)
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8)

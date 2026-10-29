@@ -1,4 +1,4 @@
-# Cuentas de Claude
+# Claude Accounts
 
 A macOS menu bar app that switches Claude Desktop between accounts without
 logging out, and carries open Code-tab sessions over to the account you switch
@@ -16,6 +16,9 @@ internals, so a Desktop update can break it.
 - Adds an account: it saves the current login and opens Claude signed out, so
   you sign in by hand once. From then on, switching needs no sign-in.
 - Brings open sessions from other accounts to the current one without switching.
+- Shows each account's usage (the 5-hour and weekly windows, plus the busiest
+  per-model weekly window) so you can see which account has room left.
+- Speaks English and Spanish, following the system language.
 
 ## How it works
 
@@ -32,11 +35,16 @@ Claude Desktop keeps its data in `~/Library/Application Support/Claude`:
   `claude-code-sessions/<account>/<org>/`. Moving the file moves the session;
   the transcripts in `~/.claude/projects` are shared by every account. Archived
   sessions are never moved.
+- Usage comes from `https://claude.ai/api/organizations/<org>/usage`, called
+  with each account's `sessionKey` cookie. Chromium encrypts that cookie with a
+  key derived from the `Claude Safe Storage` keychain item, so the first time
+  macOS asks whether the app may read that item. The key and the cookies are
+  only kept in memory.
 - The active account and organization come from the last
   `[LocalSessionManager] Initialization succeeded` line in
   `~/Library/Logs/Claude/main*.log`.
 
-Every change happens with Claude closed.
+Every change happens with Claude closed. Reading usage never changes anything.
 
 ## Caveats
 
@@ -49,13 +57,22 @@ Every change happens with Claude closed.
 - Account and organization names live in `labels.json` in the storage folder.
   The current account can be renamed from the menu.
 
+## Localization
+
+The English text in the code is the key. Translations live in
+`Resources/Localization/<language>.lproj/Localizable.strings`, and
+`InfoPlist.strings` there localizes the app's name. To add a language, add a
+folder and run `scripts/check-localizations`, which lists the keys each
+language is missing or no longer uses.
+
 ## Building
 
 Requires macOS 14 or later and Xcode with Swift 6.
 
 ```bash
 swift test                   # core tests
-scripts/build-app            # build/Cuentas de Claude.app
+scripts/check-localizations  # every language has every key
+scripts/build-app            # build/Claude Accounts.app
 scripts/build-app --install  # copy to ~/Applications and open it
 scripts/make-icon            # regenerate Resources/AppIcon.icns
 ```

@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>es</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Cuentas de Claude</string>
+	<string>Claude Accounts</string>
 	<key>CFBundleExecutable</key>
 	<string>ClaudeAccounts</string>
 	<key>CFBundleIconFile</key>
@@ -16,16 +16,19 @@
 	<string>6.0</string>
 	<key>CFBundleLocalizations</key>
 	<array>
+		<string>en</string>
 		<string>es</string>
 	</array>
 	<key>CFBundleName</key>
-	<string>Cuentas de Claude</string>
+	<string>Claude Accounts</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
+	<key>LSHasLocalizedDisplayName</key>
+	<true/>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
