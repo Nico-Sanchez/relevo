@@ -106,6 +106,13 @@ struct HomeView: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .padding(.horizontal, 8)
+            Toggle("Show usage", isOn: Binding(
+                get: { model.showsUsage },
+                set: { enabled in Task { await model.setShowsUsage(enabled) } }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .padding(.horizontal, 8)
             MenuRow(title: "Quit", systemImage: "power") { NSApp.terminate(nil) }
         }
     }

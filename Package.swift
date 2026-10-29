@@ -29,5 +29,9 @@ let package = Package(
             dependencies: ["RelevoCore"],
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
+        .testTarget(
+            name: "RelevoUITests",
+            dependencies: ["RelevoCore", "RelevoUI"]
+        ),
     ]
 )

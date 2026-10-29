@@ -5,8 +5,8 @@
 <h1 align="center">Relevo</h1>
 
 <p align="center">
-  A menu bar app for Claude Desktop: switch between accounts, take your open
-  sessions with you, and see at a glance which account still has room.
+  A menu bar app for Claude Desktop: switch between your accounts with one
+  click and take your open sessions with you.
 </p>
 
 <p align="center">
@@ -46,9 +46,9 @@ handover between shifts, which is what it does with your work.
 - **Sessions follow you.** When you switch, the open Code sessions of the
   account you're leaving are ticked to come along. Untick any you want to leave
   behind, or pick sessions from other accounts too.
-- **Usage at a glance.** Every account shows its 5-hour and weekly windows,
-  plus the busiest per-model weekly limit, in green, orange or red. Hover a bar
-  to see when it resets.
+- **Optional usage display.** Off by default. When you turn it on, every
+  account shows its 5-hour and weekly windows, plus the busiest other limit, in
+  green, orange or red. Hover a bar to see when it resets.
 - **Add accounts in place.** It saves the current login and opens Claude signed
   out; you sign in with the other account once, and from then on it's a click.
 - **English and Spanish**, following the system language.
@@ -98,14 +98,26 @@ the menu bar; turn on **Open at login** from its menu to keep it there.
    signed out; sign in with that account.
 2. **Switch.** Open the menu and click the account you want. Untick any
    sessions you'd rather leave where they are, then **Switch**.
-3. **See usage.** The first time you open the menu, macOS asks whether Relevo
-   may use the `Claude Safe Storage` keychain item. Allow it to see each
-   account's usage; everything else works without it.
+3. **Usage, if you want it.** Turn on **Show usage** in the menu. Relevo
+   explains what it does, and macOS asks whether it may use the
+   `Claude Safe Storage` keychain item. Read
+   [About the usage display](#about-the-usage-display) first.
 
 > [!WARNING]
 > Never use Claude's own **Log out** on an account you want to keep. It ends the
 > session on Anthropic's side, and the saved login stops working. If it happens,
 > sign in again; the next switch saves the new login.
+
+## About the usage display
+
+Claude Desktop doesn't show how much of each account's limits you've used, so
+Relevo asks claude.ai's private usage endpoint directly, with each account's
+session. Anthropic's [Consumer Terms](https://www.anthropic.com/legal/consumer-terms)
+don't allow accessing Claude through automated means except with an API key,
+so this is off by default and turning it on is your call, at your own risk.
+
+Switching accounts and moving sessions never contact Anthropic: they only move
+Claude Desktop's own files on your Mac.
 
 ## How it works
 
@@ -125,8 +137,9 @@ Claude Desktop keeps its data in `~/Library/Application Support/Claude`.
 - **Current account.** It comes from the last
   `[LocalSessionManager] Initialization succeeded` line in
   `~/Library/Logs/Claude/main*.log`.
-- **Usage.** It comes from `https://claude.ai/api/organizations/<org>/usage`,
-  called with each account's `sessionKey`. Chromium encrypts that cookie with a
+- **Usage**, only with **Show usage** on. It comes from
+  `https://claude.ai/api/organizations/<org>/usage`, called with each account's
+  `sessionKey`. Chromium encrypts that cookie with a
   key derived from the `Claude Safe Storage` keychain item, which is why macOS
   asks for permission.
 
@@ -135,8 +148,9 @@ anything.
 
 ## Privacy
 
-- The only network calls are the usage requests to claude.ai, one per account,
-  at most once a minute while the menu is open.
+- With **Show usage** off, the default, Relevo makes no network requests. With
+  it on, the only requests go to claude.ai, one per account, at most once a
+  minute while the menu is open.
 - Saved logins stay on your Mac, in a folder only your user can read. The
   keychain key and the decrypted cookies are only held in memory.
 - No analytics, no telemetry, no update checks.
@@ -153,9 +167,8 @@ anything.
 ## Localization
 
 The English text in the code is the key. Translations live in
-`Resources/Localization/<language>.lproj/Localizable.strings`, and
-`InfoPlist.strings` there localizes the app's name. To add a language, add a
-folder and run `scripts/check-localizations`, which lists the keys that
+`Resources/Localization/<language>.lproj/Localizable.strings`. To add a
+language, add a folder and run `scripts/check-localizations`, which lists the keys that
 language is missing or no longer uses.
 
 ## Development

@@ -95,9 +95,11 @@ final class Renderer: NSObject, NSApplicationDelegate {
                 let usage = UsageSource(prepare: {}, fetch: { account in
                     Usage(windows: Demo.usage[account.id] ?? [], fetchedAt: .now)
                 })
-                let model = AppModel(store: store, usageSource: usage)
+                let defaults = UserDefaults(suiteName: "relevo-screenshots")!
+                defaults.removeObject(forKey: "showsUsage")
+                let model = AppModel(store: store, usageSource: usage, defaults: defaults, confirmUsage: { true })
                 await model.refresh()
-                await model.refreshUsage(force: true)
+                await model.setShowsUsage(true)
                 for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                     for screen in screens {
                         try await render(screen, model: model, appearance: appearance)

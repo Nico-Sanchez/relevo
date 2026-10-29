@@ -20,10 +20,17 @@ enum Display {
             return String(localized: "5 h")
         case "seven_day":
             return String(localized: "Week")
+        case "extra_usage":
+            return String(localized: "Extra usage")
         default:
-            guard id.hasPrefix("seven_day_") else { return id }
-            return String(localized: "Week · \(id.dropFirst("seven_day_".count).capitalized)")
+            guard id.hasPrefix("seven_day_") else { return readable(id) }
+            return String(localized: "Week · \(readable(String(id.dropFirst("seven_day_".count))))")
         }
+    }
+
+    private static func readable(_ id: String) -> String {
+        let words = id.replacingOccurrences(of: "_", with: " ")
+        return words.prefix(1).uppercased() + words.dropFirst()
     }
 
     static func message(for error: Error, names: [String: String]) -> String {

@@ -19,9 +19,14 @@ public final class AppModel {
         case bringing
     }
 
+    static let showsUsageKey = "showsUsage"
+
     let store: AccountStore
     let usageSource: UsageSource
+    let defaults: UserDefaults
+    let confirmUsage: @MainActor () -> Bool
     public internal(set) var snapshot = Snapshot.empty
+    public private(set) var showsUsage: Bool
     public var screen = Screen.home
     var progress: String?
     var notice: String?
@@ -30,9 +35,17 @@ public final class AppModel {
     var usageUpdatedAt: Date?
     var needsKeychainAccess = false
 
-    public init(store: AccountStore = AccountStore(), usageSource: UsageSource? = nil) {
+    public init(
+        store: AccountStore = AccountStore(),
+        usageSource: UsageSource? = nil,
+        defaults: UserDefaults = .standard,
+        confirmUsage: (@MainActor () -> Bool)? = nil
+    ) {
         self.store = store
         self.usageSource = usageSource ?? .claudeAI(store: store)
+        self.defaults = defaults
+        self.confirmUsage = confirmUsage ?? AppModel.askToShowUsage
+        showsUsage = defaults.bool(forKey: Self.showsUsageKey)
     }
 
     private var names: [String: String] {
@@ -44,7 +57,23 @@ public final class AppModel {
         snapshot = await Task.detached { store.snapshot() }.value
     }
 
+    public func setShowsUsage(_ enabled: Bool) async {
+        if enabled, !showsUsage, !confirmUsage() {
+            return
+        }
+        showsUsage = enabled
+        defaults.set(enabled, forKey: Self.showsUsageKey)
+        if enabled {
+            await refreshUsage(force: true)
+        } else {
+            usage = [:]
+            usageUpdatedAt = nil
+            needsKeychainAccess = false
+        }
+    }
+
     public func refreshUsage(force: Bool = false) async {
+        guard showsUsage else { return }
         if !force, let usageUpdatedAt, Date.now.timeIntervalSince(usageUpdatedAt) < 60 { return }
         let accounts = snapshot.accounts.filter { $0.location != nil }
         guard !accounts.isEmpty else { return }
@@ -148,6 +177,16 @@ public final class AppModel {
             show(Display.message(for: error, names: names))
         }
         await refresh()
+    }
+
+    static func askToShowUsage() -> Bool {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Show each account's usage?")
+        alert.informativeText = String(localized: "Relevo will read each account's session from Claude Desktop and ask claude.ai for its usage, at most once a minute while the menu is open. Anthropic's terms don't allow automated access to Claude outside its API, so you use this at your own risk. macOS will ask for access to the “Claude Safe Storage” keychain item.")
+        alert.addButton(withTitle: String(localized: "Show usage"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     private func show(_ message: String) {
