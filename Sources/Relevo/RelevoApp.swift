@@ -3,15 +3,19 @@ import SwiftUI
 
 @main
 struct RelevoApp: App {
-    @State private var model = AppModel()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        MenuBarExtra {
-            MenuView(model: model)
-                .frame(width: 340)
-        } label: {
-            Image(systemName: "person.2.circle")
-        }
-        .menuBarExtraStyle(.window)
+        Settings { EmptyView() }
+            .commands { CommandGroup(replacing: .appSettings) {} }
+    }
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var menuBar: MenuBarController?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        menuBar = MenuBarController(model: AppModel())
     }
 }

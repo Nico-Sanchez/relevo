@@ -107,6 +107,7 @@ struct SessionPicker: View {
             }
             .padding(.top, 4)
             .padding(.leading, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
         } label: {
             Toggle(isOn: Binding(
                 get: { group.sessions.allSatisfy { selected.contains(key(group, $0)) } },

@@ -42,6 +42,8 @@ public struct MenuView: View {
             }
         }
         .padding(12)
+        .frame(width: 340)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             Task {
                 await model.refresh()
