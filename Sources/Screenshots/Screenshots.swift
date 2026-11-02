@@ -123,8 +123,6 @@ final class Renderer: NSObject, NSApplicationDelegate {
             model.screen = .home
         }
         let content = MenuView(model: model)
-            .frame(width: 340)
-            .background(Color(nsColor: .windowBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.primary.opacity(0.12)))
             .shadow(color: .black.opacity(0.22), radius: 18, y: 8)

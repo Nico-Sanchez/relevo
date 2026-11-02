@@ -13,8 +13,8 @@
 "Brought %lld sessions." = "Traje %lld sesiones.";
 "Brought 1 session." = "Traje 1 sesión.";
 "Cancel" = "Cancelar";
-"Claude didn't quit. Nothing changed." = "Claude no se cerró. No cambié nada.";
 "Claude has no account signed in." = "Claude no tiene ninguna cuenta abierta.";
+"Claude hasn't quit yet. If it's asking you something, answer in its window: Relevo continues as soon as it closes." = "Claude todavía no se cerró. Si te pregunta algo, respondé en su ventana: Relevo sigue apenas se cierre.";
 "Claude is still open. Nothing changed." = "Claude sigue abierto. No cambié nada.";
 "Claude isn't on %@. No sessions were moved." = "Claude no está en %@. No moví ninguna sesión.";
 "Claude opened signed out: sign in with %@." = "Claude abrió sin sesión: entrá con %@.";
@@ -33,6 +33,7 @@
 "No access to the keychain." = "Sin acceso al llavero.";
 "No open sessions in other accounts." = "No hay sesiones abiertas en otras cuentas.";
 "No saved session." = "Sin sesión guardada.";
+"Nothing changed. If Claude is still asking whether to quit, cancel it there too." = "No cambié nada. Si Claude sigue preguntando si se cierra, cancelalo también ahí.";
 "Open at login" = "Abrir al iniciar sesión";
 "Quit" = "Salir";
 "Quitting Claude…" = "Cerrando Claude…";

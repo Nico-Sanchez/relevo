@@ -43,7 +43,9 @@ handover between shifts, which is what it does with your work.
 ## Features
 
 - **One-click switching.** Claude quits, the other account's login goes in,
-  and Claude opens on it. No password, no browser round trip.
+  and Claude opens on it. No password, no browser round trip. If Claude has work
+  running and asks before quitting, Relevo brings it to the front and waits for
+  your answer, and you can cancel from the menu.
 - **Sessions follow you.** When you switch, the open Code sessions of the
   account you're leaving are ticked to come along. Untick any you want to leave
   behind, or pick sessions from other accounts too.

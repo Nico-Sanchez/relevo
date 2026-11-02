@@ -25,26 +25,31 @@ public final class AppModel {
     let usageSource: UsageSource
     let defaults: UserDefaults
     let confirmUsage: @MainActor () -> Bool
+    let claude: ClaudeApp
     public internal(set) var snapshot = Snapshot.empty
     public private(set) var showsUsage: Bool
     public var screen = Screen.home
     var progress: String?
+    var waitingForClaude = false
     var notice: String?
     var opensAtLogin = SMAppService.mainApp.status == .enabled
     var usage: [String: UsageState] = [:]
     var usageUpdatedAt: Date?
     var needsKeychainAccess = false
+    private var quitting: Task<Bool, Never>?
 
     public init(
         store: AccountStore = AccountStore(),
         usageSource: UsageSource? = nil,
         defaults: UserDefaults = .standard,
-        confirmUsage: (@MainActor () -> Bool)? = nil
+        confirmUsage: (@MainActor () -> Bool)? = nil,
+        claude: ClaudeApp = .installed()
     ) {
         self.store = store
         self.usageSource = usageSource ?? .claudeAI(store: store)
         self.defaults = defaults
         self.confirmUsage = confirmUsage ?? AppModel.askToShowUsage
+        self.claude = claude
         showsUsage = defaults.bool(forKey: Self.showsUsageKey)
     }
 
@@ -158,17 +163,26 @@ public final class AppModel {
         opensAtLogin = SMAppService.mainApp.status == .enabled
     }
 
+    func cancelQuit() {
+        quitting?.cancel()
+    }
+
     private func run(working message: String, _ operation: @escaping @Sendable (AccountStore) throws -> String) async {
         progress = String(localized: "Quitting Claude…")
         defer { progress = nil }
-        guard await ClaudeApp.quit() else {
-            show(String(localized: "Claude didn't quit. Nothing changed."))
+        let quitting = Task { await claude.quit { self.waitingForClaude = true } }
+        self.quitting = quitting
+        let quit = await quitting.value
+        waitingForClaude = false
+        guard quit else {
+            screen = .home
+            notice = String(localized: "Nothing changed. If Claude is still asking whether to quit, cancel it there too.")
             return
         }
         progress = message
         let store = store
         let outcome = await Task.detached { Result { try operation(store) } }.value
-        ClaudeApp.launch()
+        claude.launch()
         screen = .home
         switch outcome {
         case .success(let summary):
@@ -199,20 +213,48 @@ public final class AppModel {
     }
 }
 
-@MainActor
-enum ClaudeApp {
-    static func quit() async -> Bool {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: AccountStore.claudeBundleIdentifier)
-        running.forEach { $0.terminate() }
-        let deadline = Date.now.addingTimeInterval(60)
-        while !running.allSatisfy(\.isTerminated), Date.now < deadline {
-            try? await Task.sleep(for: .milliseconds(500))
+public struct ClaudeApp: Sendable {
+    typealias Action = @MainActor @Sendable () -> Void
+
+    let isRunning: @MainActor @Sendable () -> Bool
+    let requestQuit: Action
+    let bringToFront: Action
+    let launch: Action
+    var patience: Duration = .seconds(2)
+
+    public static func installed(bundleIdentifier: String = AccountStore.claudeBundleIdentifier) -> ClaudeApp {
+        let instances: @MainActor @Sendable () -> [NSRunningApplication] = {
+            NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
         }
-        return running.allSatisfy(\.isTerminated)
+        return ClaudeApp(
+            isRunning: { !instances().isEmpty },
+            requestQuit: { instances().forEach { $0.terminate() } },
+            bringToFront: { instances().forEach { $0.activate(from: .current) } },
+            launch: {
+                guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else { return }
+                NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+            }
+        )
     }
 
-    static func launch() {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: AccountStore.claudeBundleIdentifier) else { return }
-        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+    @MainActor
+    func quit(onRefused: () -> Void) async -> Bool {
+        guard isRunning() else { return true }
+        requestQuit()
+        let patienceEnds = ContinuousClock.now + patience
+        var refused = false
+        while isRunning() {
+            if !refused, ContinuousClock.now >= patienceEnds {
+                refused = true
+                bringToFront()
+                onRefused()
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(500))
+            } catch {
+                return !isRunning()
+            }
+        }
+        return true
     }
 }

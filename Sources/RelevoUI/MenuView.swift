@@ -11,9 +11,19 @@ public struct MenuView: View {
     public var body: some View {
         Group {
             if let progress = model.progress {
-                HStack(spacing: 10) {
-                    ProgressView().controlSize(.small)
-                    Text(progress)
+                VStack(spacing: 10) {
+                    HStack(spacing: 10) {
+                        ProgressView().controlSize(.small)
+                        Text(progress)
+                    }
+                    if model.waitingForClaude {
+                        Text("Claude hasn't quit yet. If it's asking you something, answer in its window: Relevo continues as soon as it closes.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button("Cancel") { model.cancelQuit() }
+                    }
                 }
                 .frame(maxWidth: .infinity, minHeight: 60)
             } else {
@@ -32,6 +42,8 @@ public struct MenuView: View {
             }
         }
         .padding(12)
+        .frame(width: 340)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             Task {
                 await model.refresh()
