@@ -9,9 +9,10 @@ struct RelevoCodeApp: App {
     var body: some Scene {
         WindowGroup("Relevo Code") {
             ContentView(model: model)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(minWidth: 560, minHeight: 420)
                 .task { await model.load() }
         }
+        .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Session") { model.showingNewSession = true }
@@ -194,7 +195,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             SidebarView(model: model)
-                .navigationSplitViewColumnWidth(min: 240, ideal: 290)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 380)
         } detail: {
             if let session = model.selected {
                 SessionView(session: session, model: model)

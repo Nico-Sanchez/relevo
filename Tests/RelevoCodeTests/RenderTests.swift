@@ -189,3 +189,53 @@ struct PaneRenderTests {
         }
     }
 }
+
+@MainActor
+@Suite(.enabled(if: renderDirectory != nil, "Set RELEVO_RENDER_DIR to write screenshots of the window"))
+struct ResizeRenderTests {
+    func narrowModel() -> AppModel {
+        let model = AppModel()
+        let session = Session(
+            configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")),
+            accountName: "nicolas.sanchez@lambdaclass.example", title: "vertex", dormant: true
+        )
+        model.sessions = [session]
+        model.selection = .open(session.id)
+        model.recent = (1...9).map { index in
+            PastSession(
+                id: "r\(index)", file: URL(filePath: "/x"), directory: URL(filePath: "/Users/ana/code/vertex/.claude/worktrees/branch-\(index)"),
+                title: "Principales en backoffice y facturación de pedidos número \(index)", lastActivity: .now.addingTimeInterval(Double(-600 * index)), branch: nil
+            )
+        }
+        model.desktop = Dictionary(uniqueKeysWithValues: (1...9).map { ("r\($0)", DesktopSession(title: nil, isArchived: false)) })
+        return model
+    }
+
+    @Test func fitsInANarrowWindowWithAndWithoutTheSidePane() async throws {
+        _ = NSApplication.shared
+        UserDefaults.standard.set(SidePaneTab.changes.rawValue, forKey: "sidePaneTab")
+        var minimums: [Bool: CGFloat] = [:]
+        for showingSidePane in [true, false] {
+            UserDefaults.standard.set(showingSidePane, forKey: "showingSidePane")
+            let hosting = NSHostingView(rootView: ContentView(model: narrowModel()))
+            hosting.sizingOptions = [.minSize]
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 650), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = hosting
+            try await Task.sleep(for: .milliseconds(1200))
+            hosting.layoutSubtreeIfNeeded()
+            minimums[showingSidePane] = window.contentMinSize.width
+            let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+            hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+            try #require(bitmap.representation(using: .png, properties: [:]))
+                .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-narrow-\(showingSidePane ? "pane" : "nopane").png"))
+            window.close()
+        }
+        UserDefaults.standard.set(true, forKey: "showingSidePane")
+
+        let withPane = try #require(minimums[true])
+        let withoutPane = try #require(minimums[false])
+        #expect(withPane <= 900, "\(minimums)")
+        #expect(withoutPane < withPane, "\(minimums)")
+    }
+}

@@ -31,7 +31,7 @@ struct SessionView: View {
         .background(Color(nsColor: .textBackgroundColor))
         .inspector(isPresented: $showingSidePane) {
             SidePane(session: session, monitor: model.monitors[session.id], environment: model.environment ?? [:])
-                .inspectorColumnWidth(min: 320, ideal: 420, max: 700)
+                .inspectorColumnWidth(min: 280, ideal: 360, max: 640)
         }
         .navigationTitle(session.title)
         .navigationSubtitle(session.workingDirectory.path)
@@ -533,11 +533,26 @@ struct ResumeBar: View {
     let model: AppModel
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            bar(explained: true)
+            bar(explained: false)
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func bar(explained: Bool) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "arrow.uturn.forward.circle")
                 .foregroundStyle(.secondary)
-            Text("Your next message continues it in")
-                .foregroundStyle(.secondary)
+                .help("Your next message continues it in")
+            if explained {
+                Text("Your next message continues it in")
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+            }
             Picker("Account", selection: Binding(
                 get: { model.account(named: session.configuration.configDirectory).id },
                 set: { id in
@@ -553,18 +568,23 @@ struct ResumeBar: View {
             .labelsHidden()
             .fixedSize()
             Toggle("As a copy", isOn: Binding(get: { session.configuration.fork }, set: { session.setFork($0) }))
+                .fixedSize()
                 .help("Keeps the original untouched and continues in a new session. Use it when Claude Desktop or another account still has it open.")
-            Spacer()
+            Spacer(minLength: 0)
             if model.isOpenInDesktop(session.configuration.resume) {
-                Label("Open in Desktop", systemImage: "desktopcomputer")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                Group {
+                    if explained {
+                        Label("Open in Desktop", systemImage: "desktopcomputer")
+                    } else {
+                        Image(systemName: "desktopcomputer")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .help("Still open in Claude Desktop")
+                .fixedSize()
             }
         }
-        .font(.callout)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -626,6 +646,22 @@ struct SessionControls: View {
     }
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            controls(compact: false)
+            controls(compact: true)
+        }
+        .disabled({ if case .ended = session.status { true } else { false } }())
+    }
+
+    private var modelName: String {
+        currentModel?.displayName ?? session.model ?? session.selectedModel ?? String(localized: "Default")
+    }
+
+    private var effortLabel: String {
+        session.effort.map(SessionControls.effortName) ?? String(localized: "Default effort")
+    }
+
+    private func controls(compact: Bool) -> some View {
         HStack(spacing: 6) {
             Menu {
                 ForEach(NewSessionView.modes, id: \.0) { mode in
@@ -640,8 +676,13 @@ struct SessionControls: View {
                     }
                 }
             } label: {
-                Text(Composer.modeName(session.permissionMode))
+                if compact {
+                    Image(systemName: Self.modeIcon(session.permissionMode))
+                } else {
+                    Text(Composer.modeName(session.permissionMode))
+                }
             }
+            .help(Composer.modeName(session.permissionMode))
             Menu {
                 ForEach(models) { option in
                     Button {
@@ -655,8 +696,13 @@ struct SessionControls: View {
                     }
                 }
             } label: {
-                Text(currentModel?.displayName ?? session.model ?? session.selectedModel ?? String(localized: "Default"))
+                if compact {
+                    Image(systemName: "cpu")
+                } else {
+                    Text(modelName)
+                }
             }
+            .help(modelName)
             Menu {
                 Button("Default") { session.setEffort(nil) }
                 ForEach(efforts, id: \.self) { level in
@@ -671,14 +717,27 @@ struct SessionControls: View {
                     }
                 }
             } label: {
-                Text(session.effort.map(SessionControls.effortName) ?? String(localized: "Default effort"))
+                if compact {
+                    Image(systemName: "gauge.with.dots.needle.50percent")
+                } else {
+                    Text(effortLabel)
+                }
             }
+            .help(effortLabel)
         }
         .menuStyle(.button)
         .buttonStyle(.bordered)
         .controlSize(.small)
         .fixedSize()
-        .disabled({ if case .ended = session.status { true } else { false } }())
+    }
+
+    static func modeIcon(_ mode: String) -> String {
+        switch mode {
+        case "acceptEdits": "pencil"
+        case "plan": "list.bullet.clipboard"
+        case "bypassPermissions": "exclamationmark.shield"
+        default: "hand.raised"
+        }
     }
 
     static func effortName(_ level: String) -> String {
