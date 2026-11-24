@@ -15,7 +15,7 @@ final class WindowModel {
     var selection: SidebarItem?
     var showingNewSession = false
     private(set) var accountID: String
-    @ObservationIgnored var openWindow: ((String) -> Void)?
+    @ObservationIgnored weak var nsWindow: NSWindow?
 
     init(app: AppModel, accountID: String?) {
         self.app = app
@@ -91,12 +91,13 @@ final class WindowModel {
         guard let request, request.accountID == accountID else { return }
         selection = .open(request.session)
         app.focusRequest = nil
+        nsWindow?.makeKeyAndOrderFront(nil)
     }
 
     private func place(_ session: Session, in account: ClaudeAccount) {
         if account != self.account, app.hasWindow(for: account, besides: id) {
             app.focusRequest = FocusRequest(accountID: account.id, session: session.id)
-            openWindow?(account.id)
+            app.openWindow?(account.id)
             reconcile()
         } else {
             if account != self.account {
@@ -132,7 +133,7 @@ struct WindowRoot: View {
                 }
             }
             .onAppear {
-                window.openWindow = { openWindow(id: Self.id, value: $0) }
+                model.openWindow = { openWindow(id: Self.id, value: $0) }
                 accountID = window.accountID
                 window.attach()
                 window.receive(model.focusRequest)
@@ -140,6 +141,9 @@ struct WindowRoot: View {
             .onDisappear { window.detach() }
             .onChange(of: window.accountID) { _, current in accountID = current }
             .onChange(of: model.focusRequest) { _, request in window.receive(request) }
+            .onChange(of: model.waitingCount, initial: true) { _, count in
+                NSApp.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+            }
     }
 }
 

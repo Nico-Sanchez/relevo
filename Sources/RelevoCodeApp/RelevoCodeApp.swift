@@ -4,7 +4,7 @@ import SwiftUI
 
 @main
 struct RelevoCodeApp: App {
-    @State private var model = AppModel()
+    @State private var model = AppModel(notifier: SystemNotifier())
 
     var body: some Scene {
         WindowGroup("Relevo Code", id: WindowRoot.id, for: String.self) { $accountID in
@@ -42,12 +42,17 @@ final class AppModel {
     private(set) var themes: [String: AccountTheme]
     private(set) var windowAccounts: [UUID: String] = [:]
     private(set) var viewing: [UUID: Session.ID] = [:]
+    @ObservationIgnored var openWindow: ((String) -> Void)?
+    @ObservationIgnored var isActive: () -> Bool = { NSApp?.isActive ?? false }
+    @ObservationIgnored var activate: () -> Void = { NSApp?.activate() }
 
+    let notifier: any Notifier
     private let defaults: UserDefaults
     private var loading: Task<Void, Never>?
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, notifier: any Notifier = SilentNotifier()) {
         self.defaults = defaults
+        self.notifier = notifier
         accounts = [.standard] + (defaults.stringArray(forKey: "accountFolders") ?? []).map {
             ClaudeAccount(configDirectory: URL(filePath: $0))
         }
@@ -55,6 +60,47 @@ final class AppModel {
             .mapValues(Date.init(timeIntervalSince1970:))
         assigned = (defaults.dictionary(forKey: "sessionAccounts") as? [String: String]) ?? [:]
         themes = ((defaults.dictionary(forKey: "accountThemes") as? [String: String]) ?? [:]).compactMapValues(AccountTheme.init)
+        notifier.onOpen = { [weak self] in self?.reveal($0) }
+    }
+
+    var waitingCount: Int {
+        sessions.filter { $0.status == .waitingForPermission }.count
+    }
+
+    func reveal(_ id: Session.ID) {
+        guard let session = sessions.first(where: { $0.id == id }) else { return }
+        let account = owner(of: session)
+        focusRequest = FocusRequest(accountID: account.id, session: id)
+        if !windowAccounts.values.contains(account.id) {
+            openWindow?(account.id)
+        }
+        activate()
+    }
+
+    func notice(_ moment: Session.Moment, from session: Session) {
+        guard !isActive() || !viewing.values.contains(session.id) else { return }
+        notifier.post(Banner(
+            session: session.id, title: session.title, subtitle: name(of: owner(of: session)),
+            body: Self.describe(moment), sound: { if case .needsYou = moment { true } else { false } }()
+        ))
+    }
+
+    static func describe(_ moment: Session.Moment) -> String {
+        switch moment {
+        case .needsYou(let request):
+            if let question = request.questions?.first {
+                return question.question
+            }
+            let detail = request.description ?? request.detail.split(separator: "\n").first.map(String.init) ?? ""
+            let action = String(localized: "Wants to use \(request.displayName)")
+            return detail.isEmpty ? action : "\(action): \(detail.prefix(160))"
+        case .finished(let reply):
+            let line = reply?.split(separator: "\n").first.map { String($0.prefix(200)) }
+            return line ?? String(localized: "Finished its turn")
+        case .stopped(let message):
+            guard let message, !message.isEmpty else { return String(localized: "Stopped") }
+            return String(localized: "Stopped: \(String(message.prefix(160)))")
+        }
     }
 
     var isEmpty: Bool {
@@ -105,6 +151,7 @@ final class AppModel {
             problem = String(localized: "Claude Code isn't installed, or it isn't on your shell's PATH.")
             return
         }
+        notifier.authorize()
         await refreshAccounts()
         await refreshRecent()
         keepRecentFresh()
@@ -165,6 +212,9 @@ final class AppModel {
     func attach(_ window: UUID, account: ClaudeAccount, viewing session: Session.ID?) {
         windowAccounts[window] = account.id
         viewing[window] = session
+        if let session {
+            notifier.withdraw(session)
+        }
     }
 
     func detach(_ window: UUID) {
@@ -328,7 +378,15 @@ final class AppModel {
         sessions.removeAll { $0.id == session.id }
     }
 
+    func observe(_ session: Session) {
+        session.onMoment = { [weak self, weak session] moment in
+            guard let self, let session else { return }
+            self.notice(moment, from: session)
+        }
+    }
+
     private func show(_ session: Session) {
+        observe(session)
         sessions.insert(session, at: 0)
         let monitor = PullRequestMonitor(session: session, environment: environment ?? [:])
         monitors[session.id] = monitor
@@ -356,7 +414,7 @@ struct ContentView: View {
                 .ignoresSafeArea(edges: .top)
                 .allowsHitTesting(false)
         }
-        .background { TitlebarHeight(height: $titlebarHeight) }
+        .background { WindowProbe(titlebarHeight: $titlebarHeight) { window.nsWindow = $0 } }
         .tint(theme.color)
         .sheet(isPresented: $window.showingNewSession) {
             NewSessionView(model: model, window: window)
@@ -397,23 +455,26 @@ struct ContentView: View {
     }
 }
 
-struct TitlebarHeight: NSViewRepresentable {
-    @Binding var height: CGFloat
+struct WindowProbe: NSViewRepresentable {
+    @Binding var titlebarHeight: CGFloat
+    let found: (NSWindow) -> Void
 
-    func makeNSView(context: Context) -> TitlebarProbe {
-        TitlebarProbe()
+    func makeNSView(context: Context) -> WindowProbeView {
+        WindowProbeView()
     }
 
-    func updateNSView(_ probe: TitlebarProbe, context: Context) {
+    func updateNSView(_ probe: WindowProbeView, context: Context) {
+        probe.found = found
         probe.report = { value in
-            if height != value {
-                height = value
+            if titlebarHeight != value {
+                titlebarHeight = value
             }
         }
     }
 }
 
-final class TitlebarProbe: NSView {
+final class WindowProbeView: NSView {
+    var found: (NSWindow) -> Void = { _ in }
     var report: (CGFloat) -> Void = { _ in }
 
     override func viewDidMoveToWindow() {
@@ -429,6 +490,7 @@ final class TitlebarProbe: NSView {
 
     private func measure() {
         guard let window, let content = window.contentView else { return }
+        found(window)
         let height = max(0, content.frame.height - window.contentLayoutRect.height)
         Task { @MainActor [weak self] in self?.report(height) }
     }

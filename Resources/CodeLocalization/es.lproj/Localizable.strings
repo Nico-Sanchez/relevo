@@ -56,6 +56,7 @@
 "Earlier messages aren't shown." = "No se muestran los mensajes anteriores.";
 "Earlier messages were summarized to free up context." = "Los mensajes anteriores se resumieron para liberar contexto.";
 "Extra high effort" = "Esfuerzo muy alto";
+"Finished its turn" = "Terminó su turno";
 "Folder" = "Carpeta";
 "gh exited with status %lld." = "gh terminó con estado %lld.";
 "Graphite" = "Grafito";
@@ -117,6 +118,8 @@
 "Starting Claude Code" = "Iniciando Claude Code";
 "Still open in Claude Desktop" = "Todavía abierta en Claude Desktop";
 "Stop" = "Detener";
+"Stopped" = "Se detuvo";
+"Stopped: %@" = "Se detuvo: %@";
 "Switch account" = "Cambiar de cuenta";
 "Teal" = "Turquesa";
 "The turn ended with an error." = "El turno terminó con un error.";
@@ -129,6 +132,7 @@
 "Uncommitted" = "Sin commitear";
 "Unread" = "Sin leer";
 "Waiting for you" = "Te está esperando";
+"Wants to use %@" = "Quiere usar %@";
 "Week" = "Semana";
 "When CI fails, a collaborator leaves feedback or the branch conflicts, this session gets a message to fix it, commit and push." = "Cuando falla el CI, un colaborador deja feedback o el branch tiene conflictos, esta sesión recibe un mensaje para arreglarlo, commitear y pushear.";
 "Work in a new worktree" = "Trabajar en un worktree nuevo";

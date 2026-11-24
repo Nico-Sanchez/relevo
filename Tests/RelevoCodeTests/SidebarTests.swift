@@ -171,7 +171,7 @@ import RelevoCI
         let first = window(model)
         let other = window(model, on: second)
         var opened: [String] = []
-        first.openWindow = { opened.append($0) }
+        model.openWindow = { opened.append($0) }
         first.selection = .open(original.id)
 
         first.handOff(original, to: second)

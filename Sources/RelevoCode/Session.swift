@@ -58,6 +58,12 @@ public final class Session: Identifiable {
         case dormant, starting, idle, working, waitingForPermission, ended(EndReason?)
     }
 
+    public enum Moment: Sendable, Equatable {
+        case needsYou(PermissionRequest)
+        case finished(String?)
+        case stopped(String?)
+    }
+
     public static let historyLimit = 400
 
     public let id = UUID()
@@ -79,6 +85,7 @@ public final class Session: Identifiable {
     public private(set) var selectedModel: String?
     public private(set) var effort: String?
     public private(set) var lastTurnEnded: Date?
+    @ObservationIgnored public var onMoment: ((Moment) -> Void)?
 
     private let environment: [String: String]
     private let executable: URL?
@@ -119,6 +126,15 @@ public final class Session: Identifiable {
             }
         }
         return workingDirectory.lastPathComponent
+    }
+
+    public var lastReply: String? {
+        for item in items.reversed() {
+            if case .assistant(let text) = item.kind, !text.isEmpty {
+                return text
+            }
+        }
+        return nil
     }
 
     public var isBusy: Bool {
@@ -366,6 +382,7 @@ public final class Session: Identifiable {
             if let toolUseID = request.toolUseID {
                 updateTool(toolUseID) { $0.state = .awaitingPermission }
             }
+            onMoment?(.needsYou(request))
         case .usage(let windows):
             usage = windows
         case .result(let result):
@@ -377,12 +394,16 @@ public final class Session: Identifiable {
             if result.isError {
                 append(.notice(.turnFailed(result.text)))
             }
+            onMoment?(result.isError ? .stopped(result.text) : .finished(lastReply))
         case .exited(let code, let message):
             pendingPermissions = []
             activity = nil
             isThinking = false
             lastTurnEnded = .now
             status = .ended(code == 0 ? nil : .exited(status: code, message: message))
+            if code != 0 {
+                onMoment?(.stopped(message))
+            }
         case .ignored:
             break
         }
