@@ -19,6 +19,7 @@
 "Ask Claude to do something…" = "Pedile algo a Claude…";
 "Auto-fix" = "Auto-fix";
 "Binary file" = "Archivo binario";
+"Blue" = "Azul";
 "Branch" = "Branch";
 "Bypass permissions" = "Saltear permisos";
 "Can't start Claude Code" = "No se puede iniciar Claude Code";
@@ -38,6 +39,7 @@
 "Close" = "Cerrar";
 "Close Session" = "Cerrar la sesión";
 "Closed pull request" = "Pull request cerrado";
+"Color" = "Color";
 "Conflicts" = "Conflictos";
 "Continue in Another Account" = "Continuar en otra cuenta";
 "Cost of this session at API prices" = "Costo de esta sesión a precios de la API";
@@ -53,6 +55,8 @@
 "Extra high effort" = "Esfuerzo muy alto";
 "Folder" = "Carpeta";
 "gh exited with status %lld." = "gh terminó con estado %lld.";
+"Graphite" = "Grafito";
+"Green" = "Verde";
 "High effort" = "Esfuerzo alto";
 "its base" = "su base";
 "Keeps the original untouched and continues in a new session. Use it when Claude Desktop or another account still has it open." = "Deja la original como está y sigue en una sesión nueva. Usalo cuando Claude Desktop u otra cuenta todavía la tiene abierta.";
@@ -63,6 +67,7 @@
 "Move this conversation to another account" = "Pasar esta conversación a otra cuenta";
 "New review feedback on PR #%lld from %@" = "Nuevo feedback de review en el PR #%lld de %@";
 "New Session" = "Nueva sesión";
+"New Window" = "Nueva ventana";
 "No changes" = "Sin cambios";
 "No changes to show" = "No hay cambios para mostrar";
 "No content changes" = "Sin cambios de contenido";
@@ -74,18 +79,23 @@
 "not a collaborator" = "no es colaborador";
 "Not watching" = "Sin seguimiento";
 "Open" = "Abiertas";
+"Open in a new window" = "Abrir en una ventana nueva";
 "Open in Desktop" = "Abierta en Desktop";
+"Open in New Window" = "Abrir en una ventana nueva";
 "Open in Terminal" = "Abrir en la terminal";
 "Open pull request" = "Pull request abierto";
 "Open this session's folder in Ghostty" = "Abrir la carpeta de esta sesión en Ghostty";
+"Orange" = "Naranja";
 "Pane" = "Panel";
 "Permissions" = "Permisos";
+"Pink" = "Rosa";
 "Plan only" = "Solo planear";
 "PR #%lld has merge conflicts" = "El PR #%lld tiene conflictos de merge";
 "pr.state.closed" = "Cerrado";
 "pr.state.merged" = "Mergeado";
 "pr.state.open" = "Abierto";
 "Pull Request" = "Pull request";
+"Purple" = "Violeta";
 "Recent" = "Recientes";
 "Refresh" = "Actualizar";
 "Relevo Code" = "Relevo Code";
@@ -103,6 +113,7 @@
 "Still open in Claude Desktop" = "Todavía abierta en Claude Desktop";
 "Stop" = "Detener";
 "Switch account" = "Cambiar de cuenta";
+"Teal" = "Turquesa";
 "The turn ended with an error." = "El turno terminó con un error.";
 "The working tree is clean." = "No hay cambios sin commitear.";
 "Thinking" = "Pensando";

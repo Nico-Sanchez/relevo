@@ -74,10 +74,11 @@ struct RenderTests {
         second.append(.user("Fix the flaky header test"))
         let session = demoSession()
         model.sessions = [session, second]
-        model.selection = .open(session.id)
+        let scene = WindowModel(app: model, accountID: nil)
+        scene.selection = .open(session.id)
 
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            let hosting = NSHostingView(rootView: ContentView(model: model))
+            let hosting = NSHostingView(rootView: ContentView(model: model, window: scene))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 780), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: appearance)
@@ -103,14 +104,14 @@ struct RenderTests {
             .event(.toolResult(toolUseID: "t1", content: "All tests passed", isError: false, patch: [])),
         ])
         model.sessions = [dormant, second]
-        model.selection = .open(dormant.id)
+        scene.selection = .open(dormant.id)
         model.recent = [
             PastSession(id: "abc", file: URL(filePath: "/x"), directory: URL(filePath: "/Users/ana/code/widgets/.claude/worktrees/retry"), title: "Retry uploads with backoff", lastActivity: .now.addingTimeInterval(-3600), branch: nil),
             PastSession(id: "d1", file: URL(filePath: "/x"), directory: URL(filePath: "/Users/ana/code/site"), title: "Dependabot security alerts", lastActivity: .now.addingTimeInterval(-7200), branch: nil),
             PastSession(id: "d2", file: URL(filePath: "/x"), directory: URL(filePath: "/Users/ana/code/widgets/.claude/worktrees/http-500"), title: "HTTP 500 on large payloads", lastActivity: .now.addingTimeInterval(-86400 * 2), branch: nil),
         ]
         model.desktop = ["d1": DesktopSession(title: "Dependabot security alerts", isArchived: false)]
-        let resumeHosting = NSHostingView(rootView: ContentView(model: model))
+        let resumeHosting = NSHostingView(rootView: ContentView(model: model, window: scene))
         let resumeWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 640), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         resumeWindow.isReleasedWhenClosed = false
         resumeWindow.appearance = NSAppearance(named: .darkAqua)
@@ -159,7 +160,8 @@ struct PaneRenderTests {
         session.loadHistory([.user("Make uploads retry three times.")])
         session.append(.automated(summary: "CI failed on PR #42: test", text: "CI failed on PR #42 (fix/uploads at abc1234).\n\n- test\n\nFind the cause, fix it…"))
         model.sessions = [session]
-        model.selection = .open(session.id)
+        let scene = WindowModel(app: model, accountID: nil)
+        scene.selection = .open(session.id)
         let source = StubSource(pullRequest(
             checks: [failingCheck, Check(name: "lint", outcome: .passed, link: nil), Check(name: "e2e", outcome: .pending, link: nil)],
             feedback: [
@@ -174,7 +176,7 @@ struct PaneRenderTests {
         for tab in SidePaneTab.allCases {
             UserDefaults.standard.set(tab.rawValue, forKey: "sidePaneTab")
             UserDefaults.standard.set(true, forKey: "showingSidePane")
-            let hosting = NSHostingView(rootView: ContentView(model: model))
+            let hosting = NSHostingView(rootView: ContentView(model: model, window: scene))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1400, height: 760), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: .aqua)
@@ -191,9 +193,9 @@ struct PaneRenderTests {
 }
 
 @MainActor
-@Suite(.enabled(if: renderDirectory != nil, "Set RELEVO_RENDER_DIR to write screenshots of the window"))
+@Suite(.serialized, .enabled(if: renderDirectory != nil, "Set RELEVO_RENDER_DIR to write screenshots of the window"))
 struct ResizeRenderTests {
-    func narrowModel() -> AppModel {
+    func narrow() -> (model: AppModel, window: WindowModel) {
         let model = AppModel()
         let session = Session(
             configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")),
@@ -218,7 +220,6 @@ struct ResizeRenderTests {
             id: "p2", toolName: "Bash", displayName: "Bash", input: .object([:]), description: nil, suggestions: [], toolUseID: nil
         )))
         model.sessions = [session, working, waiting, finished, elsewhere]
-        model.selection = .open(session.id)
         model.recent = (1...9).map { index in
             PastSession(
                 id: "r\(index)", file: URL(filePath: "/x"), directory: URL(filePath: index.isMultiple(of: 3) ? "/Users/ana/code/relevo" : "/Users/ana/code/vertex/.claude/worktrees/branch-\(index)"),
@@ -235,13 +236,16 @@ struct ResizeRenderTests {
                 lastTurnEnded: [1, 4].contains(index) ? .now : nil
             ))
         })
-        return model
+        let scene = WindowModel(app: model, accountID: nil)
+        scene.selection = .open(session.id)
+        return (model, scene)
     }
 
     @Test func rendersTheSidebarIndicators() async throws {
         _ = NSApplication.shared
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            let hosting = NSHostingView(rootView: SidebarView(model: narrowModel()).frame(width: 300, height: 640))
+            let (model, scene) = narrow()
+            let hosting = NSHostingView(rootView: SidebarView(model: model, window: scene).frame(width: 300, height: 640))
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 640), styleMask: [.titled], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: appearance)
@@ -256,9 +260,35 @@ struct ResizeRenderTests {
         }
     }
 
+    @Test func rendersEachAccountInItsOwnColor() async throws {
+        _ = NSApplication.shared
+        let (model, _) = narrow()
+        for (account, appearance) in zip(model.accounts, [NSAppearance.Name.aqua, .darkAqua]) {
+            let scene = WindowModel(app: model, accountID: account.id)
+            scene.selection = scene.visibleSessions.first.map { .open($0.id) }
+            let hosting = NSHostingView(rootView: ContentView(model: model, window: scene))
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 1000, height: 560),
+                styleMask: [.titled, .closable, .resizable, .fullSizeContentView], backing: .buffered, defer: false
+            )
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: appearance)
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            try await Task.sleep(for: .milliseconds(1000))
+            let frame = try #require(window.contentView?.superview)
+            let bitmap = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
+            frame.cacheDisplay(in: frame.bounds, to: bitmap)
+            try #require(bitmap.representation(using: .png, properties: [:]))
+                .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-theme-\(model.theme(of: account).rawValue).png"))
+            window.close()
+        }
+    }
+
     @Test func rendersTheAccountList() async throws {
         _ = NSApplication.shared
-        let hosting = NSHostingView(rootView: AccountList(model: narrowModel()) {})
+        let (model, scene) = narrow()
+        let hosting = NSHostingView(rootView: AccountList(model: model, window: scene) {})
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = hosting
@@ -274,7 +304,8 @@ struct ResizeRenderTests {
 
     @Test func rendersTheSessionFinder() async throws {
         _ = NSApplication.shared
-        let hosting = NSHostingView(rootView: AllSessionsView(model: narrowModel()))
+        let (model, scene) = narrow()
+        let hosting = NSHostingView(rootView: AllSessionsView(model: model, window: scene))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 560), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = hosting
@@ -292,7 +323,8 @@ struct ResizeRenderTests {
         var minimums: [Bool: CGFloat] = [:]
         for showingSidePane in [true, false] {
             UserDefaults.standard.set(showingSidePane, forKey: "showingSidePane")
-            let hosting = NSHostingView(rootView: ContentView(model: narrowModel()))
+            let (model, scene) = narrow()
+            let hosting = NSHostingView(rootView: ContentView(model: model, window: scene))
             hosting.sizingOptions = [.minSize]
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 650), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false

@@ -7,17 +7,12 @@ struct RelevoCodeApp: App {
     @State private var model = AppModel()
 
     var body: some Scene {
-        WindowGroup("Relevo Code") {
-            ContentView(model: model)
-                .frame(minWidth: 560, minHeight: 420)
-                .task { await model.load() }
+        WindowGroup("Relevo Code", id: WindowRoot.id, for: String.self) { $accountID in
+            WindowRoot(model: model, accountID: $accountID)
         }
         .windowResizability(.contentMinSize)
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("New Session") { model.showingNewSession = true }
-                    .keyboardShortcut("n")
-            }
+            WindowCommands(model: model)
         }
     }
 }
@@ -31,7 +26,6 @@ enum SidebarItem: Hashable {
 @Observable
 final class AppModel {
     var sessions: [Session] = []
-    var selection: SidebarItem?
     var accounts: [ClaudeAccount]
     var accountInfo: [String: AccountInfo] = [:]
     var recent: [PastSession] = []
@@ -39,15 +33,18 @@ final class AppModel {
     var environment: [String: String]?
     var executable: URL?
     var problem: String?
-    var showingNewSession = false
     var monitors: [Session.ID: PullRequestMonitor] = [:]
     var seen: [String: Date]
-    private(set) var seenOpen: [Session.ID: Date] = [:]
-    private(set) var currentAccountID: String
-    private(set) var assigned: [String: String]
     var owners: [String: String] = [:]
+    var focusRequest: FocusRequest?
+    private(set) var seenOpen: [Session.ID: Date] = [:]
+    private(set) var assigned: [String: String]
+    private(set) var themes: [String: AccountTheme]
+    private(set) var windowAccounts: [UUID: String] = [:]
+    private(set) var viewing: [UUID: Session.ID] = [:]
 
     private let defaults: UserDefaults
+    private var loading: Task<Void, Never>?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -56,25 +53,16 @@ final class AppModel {
         }
         seen = ((defaults.dictionary(forKey: "seenSessions") as? [String: Double]) ?? [:])
             .mapValues(Date.init(timeIntervalSince1970:))
-        currentAccountID = defaults.string(forKey: "currentAccount") ?? ClaudeAccount.standard.id
         assigned = (defaults.dictionary(forKey: "sessionAccounts") as? [String: String]) ?? [:]
+        themes = ((defaults.dictionary(forKey: "accountThemes") as? [String: String]) ?? [:]).compactMapValues(AccountTheme.init)
     }
 
-    var selected: Session? {
-        guard case .open(let id) = selection else { return nil }
-        return sessions.first { $0.id == id }
+    var isEmpty: Bool {
+        executable != nil && sessions.isEmpty && recent.isEmpty
     }
 
-    var currentAccount: ClaudeAccount {
-        accounts.first { $0.id == currentAccountID } ?? accounts.first ?? .standard
-    }
-
-    var visibleSessions: [Session] {
-        sessions.filter { owner(of: $0) == currentAccount }
-    }
-
-    var visibleRecent: [PastSession] {
-        recent(of: currentAccount)
+    func sessions(of account: ClaudeAccount) -> [Session] {
+        sessions.filter { owner(of: $0) == account }
     }
 
     func recent(of account: ClaudeAccount) -> [PastSession] {
@@ -101,6 +89,15 @@ final class AppModel {
     }
 
     func load() async {
+        if let loading {
+            return await loading.value
+        }
+        let task = Task { await performLoad() }
+        loading = task
+        await task.value
+    }
+
+    private func performLoad() async {
         let environment = await Task.detached { ShellEnvironment.load() }.value
         self.environment = environment
         executable = ShellEnvironment.claudeExecutable(in: environment)
@@ -110,9 +107,6 @@ final class AppModel {
         }
         await refreshAccounts()
         await refreshRecent()
-        if sessions.isEmpty, recent.isEmpty {
-            showingNewSession = true
-        }
         keepRecentFresh()
     }
 
@@ -155,23 +149,48 @@ final class AppModel {
         return [info.organization, info.subscription?.capitalized].compactMap { $0 }.joined(separator: " · ")
     }
 
-    func switchAccount(to account: ClaudeAccount) {
-        currentAccountID = account.id
-        defaults.set(account.id, forKey: "currentAccount")
-        if let selected, owner(of: selected) != account {
-            selection = visibleSessions.first.map { .open($0.id) }
+    func theme(of account: ClaudeAccount) -> AccountTheme {
+        if let theme = themes[account.id] {
+            return theme
         }
+        let index = accounts.firstIndex(of: account) ?? 0
+        return AccountTheme.allCases[index % AccountTheme.allCases.count]
+    }
+
+    func setTheme(_ theme: AccountTheme, for account: ClaudeAccount) {
+        themes[account.id] = theme
+        defaults.set(themes.mapValues(\.rawValue), forKey: "accountThemes")
+    }
+
+    func attach(_ window: UUID, account: ClaudeAccount, viewing session: Session.ID?) {
+        windowAccounts[window] = account.id
+        viewing[window] = session
+    }
+
+    func detach(_ window: UUID) {
+        windowAccounts[window] = nil
+        viewing[window] = nil
+    }
+
+    func hasWindow(for account: ClaudeAccount, besides window: UUID) -> Bool {
+        windowAccounts.contains { $0.key != window && $0.value == account.id }
+    }
+
+    var accountForNewWindow: ClaudeAccount {
+        let shown = Set(windowAccounts.values)
+        return accounts.first { !shown.contains($0.id) } ?? accounts.first ?? .standard
     }
 
     func attention(of account: ClaudeAccount) -> Attention? {
-        let marks = sessions.filter { owner(of: $0) == account }.compactMap(attention(of:))
-            + recent(of: account).compactMap(attention(of:))
-        return marks.contains(.waiting) ? .waiting : marks.first
+        strongest(sessions(of: account).compactMap(attention(of:)) + recent(of: account).compactMap(attention(of:)))
     }
 
-    var attentionElsewhere: Attention? {
-        let marks = accounts.filter { $0 != currentAccount }.compactMap(attention(of:))
-        return marks.contains(.waiting) ? .waiting : marks.first
+    func attention(otherThan account: ClaudeAccount) -> Attention? {
+        strongest(accounts.filter { $0 != account }.compactMap(attention(of:)))
+    }
+
+    private func strongest(_ marks: [Attention]) -> Attention? {
+        marks.contains(.waiting) ? .waiting : marks.first
     }
 
     func otherAccounts(than account: ClaudeAccount) -> [ClaudeAccount] {
@@ -179,11 +198,11 @@ final class AppModel {
     }
 
     func canHandOff(_ session: Session) -> Bool {
-        session.status == .dormant || (session.sessionID != nil && !session.isBusy)
+        accounts.count > 1 && (session.status == .dormant || (session.sessionID != nil && !session.isBusy))
     }
 
-    func handOff(_ session: Session, to account: ClaudeAccount) {
-        guard account != owner(of: session), canHandOff(session), let id = session.sessionID else { return }
+    func handOff(_ session: Session, to account: ClaudeAccount) -> Session? {
+        guard account != owner(of: session), canHandOff(session), let id = session.sessionID else { return nil }
         let moved: Session
         if session.status == .dormant {
             session.setAccount(configDirectory: account.configDirectory, name: name(of: account))
@@ -191,7 +210,7 @@ final class AppModel {
         } else {
             guard let continuation = session.continuation(
                 configDirectory: account.configDirectory, accountName: name(of: account), fork: isOpenInDesktop(id)
-            ) else { return }
+            ) else { return nil }
             close(session)
             show(continuation)
             moved = continuation
@@ -199,16 +218,14 @@ final class AppModel {
         if !moved.configuration.fork {
             assign(id, to: account)
         }
-        switchAccount(to: account)
-        selection = .open(moved.id)
+        return moved
     }
 
-    func handOff(_ past: PastSession, to account: ClaudeAccount) {
+    func handOff(_ past: PastSession, to account: ClaudeAccount) -> Session {
         if !isOpenInDesktop(past.id) {
             assign(past.id, to: account)
         }
-        switchAccount(to: account)
-        open(past, in: account)
+        return open(past, in: account)
     }
 
     private func assign(_ sessionID: String, to account: ClaudeAccount) {
@@ -230,25 +247,23 @@ final class AppModel {
         await refreshRecent()
     }
 
-    func startSession(in folder: URL, account: ClaudeAccount, permissionMode: String, worktree: Bool) {
+    func startSession(in folder: URL, account: ClaudeAccount, permissionMode: String, worktree: Bool) -> Session {
         let configuration = SessionConfiguration(
             directory: folder, configDirectory: account.configDirectory, permissionMode: permissionMode,
             worktree: worktree ? "session-\(UUID().uuidString.prefix(6).lowercased())" : nil
         )
         let session = Session(configuration: configuration, accountName: name(of: account), environment: environment ?? [:], executable: executable)
-        switchAccount(to: account)
         show(session)
         lastFolder = folder
         lastPermissionMode = permissionMode
         session.start()
+        return session
     }
 
-    func open(_ past: PastSession, in account: ClaudeAccount? = nil) {
+    func open(_ past: PastSession, in account: ClaudeAccount) -> Session {
         if let existing = sessions.first(where: { $0.sessionID == past.id }) {
-            selection = .open(existing.id)
-            return
+            return existing
         }
-        let account = account ?? currentAccount
         let configuration = SessionConfiguration(
             directory: past.directory, configDirectory: account.configDirectory, resume: past.id,
             fork: isOpenInDesktop(past.id), permissionMode: lastPermissionMode
@@ -262,6 +277,7 @@ final class AppModel {
             let entries = await Task.detached { History.entries(in: past.file) }.value
             session.loadHistory(entries)
         }
+        return session
     }
 
     func isOpenInDesktop(_ id: String?) -> Bool {
@@ -283,7 +299,7 @@ final class AppModel {
         if session.status == .waitingForPermission {
             return .waiting
         }
-        guard selection != .open(session.id), let ended = session.lastTurnEnded else { return nil }
+        guard !viewing.values.contains(session.id), let ended = session.lastTurnEnded else { return nil }
         return ended > (seenOpen[session.id] ?? .distantPast) ? .unread : nil
     }
 
@@ -310,14 +326,10 @@ final class AppModel {
             assign(id, to: owner(of: session))
         }
         sessions.removeAll { $0.id == session.id }
-        if selection == .open(session.id) {
-            selection = visibleSessions.first.map { .open($0.id) }
-        }
     }
 
     private func show(_ session: Session) {
         sessions.insert(session, at: 0)
-        selection = .open(session.id)
         let monitor = PullRequestMonitor(session: session, environment: environment ?? [:])
         monitors[session.id] = monitor
         monitor.start()
@@ -325,41 +337,70 @@ final class AppModel {
 }
 
 struct ContentView: View {
-    @Bindable var model: AppModel
+    let model: AppModel
+    @Bindable var window: WindowModel
 
     var body: some View {
+        let theme = model.theme(of: window.account)
         NavigationSplitView {
-            SidebarView(model: model)
+            SidebarView(model: model, window: window)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 380)
+                .accountTint(theme.color)
         } detail: {
-            if let session = model.selected {
-                SessionView(session: session, model: model)
-                    .id(session.id)
-            } else if let problem = model.problem {
-                ContentUnavailableView("Can't start Claude Code", systemImage: "exclamationmark.triangle", description: Text(problem))
-            } else {
-                ContentUnavailableView {
-                    Label("No session", systemImage: "bubble.left.and.text.bubble.right")
-                } description: {
-                    Text("Start a new session, or pick a recent one to continue it.")
-                } actions: {
-                    Button("New Session") { model.showingNewSession = true }
-                        .disabled(model.executable == nil)
-                }
-            }
+            detail
+                .accountTint(theme.color)
         }
-        .sheet(isPresented: $model.showingNewSession) {
-            NewSessionView(model: model)
+        .tint(theme.color)
+        .sheet(isPresented: $window.showingNewSession) {
+            NewSessionView(model: model, window: window)
         }
-        .onChange(of: model.selection) { previous, current in
+        .onChange(of: window.selection) { previous, current in
             model.markSeen(previous)
             model.markSeen(current)
             if case .recent(let id) = current, let past = model.recent.first(where: { $0.id == id }) {
-                model.open(past)
+                window.open(past)
             }
+            window.attach()
+        }
+        .onChange(of: model.sessions.map(\.id)) {
+            window.reconcile()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.refreshRecent() }
+        }
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        if let session = window.selected {
+            SessionView(session: session, model: model, window: window)
+                .id(session.id)
+        } else if let problem = model.problem {
+            ContentUnavailableView("Can't start Claude Code", systemImage: "exclamationmark.triangle", description: Text(problem))
+        } else {
+            ContentUnavailableView {
+                Label("No session", systemImage: "bubble.left.and.text.bubble.right")
+            } description: {
+                Text("Start a new session, or pick a recent one to continue it.")
+            } actions: {
+                Button("New Session") { window.showingNewSession = true }
+                    .disabled(model.executable == nil)
+            }
+        }
+    }
+}
+
+extension View {
+    func accountTint(_ color: Color) -> some View {
+        overlay {
+            GeometryReader { proxy in
+                let inset = proxy.safeAreaInsets.top
+                color.opacity(0.35)
+                    .frame(height: inset)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .offset(y: -inset)
+            }
+            .allowsHitTesting(false)
         }
     }
 }
@@ -367,15 +408,16 @@ struct ContentView: View {
 struct SidebarView: View {
     static let recentLimit = 8
 
-    @Bindable var model: AppModel
+    let model: AppModel
+    @Bindable var window: WindowModel
     @AppStorage("recentExpanded") private var recentExpanded = true
     @State private var showingAllSessions = false
 
     var body: some View {
-        List(selection: $model.selection) {
-            if !model.visibleSessions.isEmpty {
+        List(selection: $window.selection) {
+            if !window.visibleSessions.isEmpty {
                 Section("Open") {
-                    ForEach(model.visibleSessions) { session in
+                    ForEach(window.visibleSessions) { session in
                         SidebarRow(
                             pullRequests: model.pullRequests(of: session),
                             attention: model.attention(of: session),
@@ -383,19 +425,19 @@ struct SidebarView: View {
                         ) {
                             SessionRow(session: session)
                         } actions: {
-                            OpenSessionMenu(model: model, session: session)
+                            OpenSessionMenu(model: model, window: window, session: session)
                         }
                         .tag(SidebarItem.open(session.id))
                     }
                 }
             }
             Section("Recent", isExpanded: $recentExpanded) {
-                let recent = model.visibleRecent
+                let recent = window.visibleRecent
                 ForEach(recent.prefix(Self.recentLimit)) { past in
                     SidebarRow(pullRequests: model.pullRequests(of: past), attention: model.attention(of: past)) {
                         RecentRow(past: past)
                     } actions: {
-                        RecentSessionMenu(model: model, past: past)
+                        RecentSessionMenu(model: model, window: window, past: past)
                     }
                     .tag(SidebarItem.recent(past.id))
                 }
@@ -415,10 +457,10 @@ struct SidebarView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            AccountSwitcher(model: model)
+            AccountSwitcher(model: model, window: window)
         }
         .sheet(isPresented: $showingAllSessions) {
-            AllSessionsView(model: model)
+            AllSessionsView(model: model, window: window)
         }
         .toolbar {
             ToolbarItemGroup {
@@ -428,7 +470,7 @@ struct SidebarView: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 Button {
-                    model.showingNewSession = true
+                    window.showingNewSession = true
                 } label: {
                     Label("New Session", systemImage: "square.and.pencil")
                 }
@@ -440,37 +482,40 @@ struct SidebarView: View {
 
 struct HandOffButtons: View {
     let model: AppModel
+    let window: WindowModel
     let session: Session
 
     var body: some View {
         ForEach(model.otherAccounts(than: model.owner(of: session))) { account in
-            Button(model.name(of: account)) { model.handOff(session, to: account) }
+            Button(model.name(of: account)) { window.handOff(session, to: account) }
         }
     }
 }
 
 struct OpenSessionMenu: View {
     let model: AppModel
+    let window: WindowModel
     let session: Session
 
     var body: some View {
         Menu("Continue in Another Account") {
-            HandOffButtons(model: model, session: session)
+            HandOffButtons(model: model, window: window, session: session)
         }
-        .disabled(!model.canHandOff(session) || model.accounts.count < 2)
+        .disabled(!model.canHandOff(session))
         Divider()
-        Button("Close Session") { model.close(session) }
+        Button("Close Session") { window.close(session) }
     }
 }
 
 struct RecentSessionMenu: View {
     let model: AppModel
+    let window: WindowModel
     let past: PastSession
 
     var body: some View {
         Menu("Continue in Another Account") {
-            ForEach(model.otherAccounts(than: model.currentAccount)) { account in
-                Button(model.name(of: account)) { model.handOff(past, to: account) }
+            ForEach(model.otherAccounts(than: window.account)) { account in
+                Button(model.name(of: account)) { window.handOff(past, to: account) }
             }
         }
         .disabled(model.accounts.count < 2)
@@ -479,6 +524,7 @@ struct RecentSessionMenu: View {
 
 struct AccountSwitcher: View {
     let model: AppModel
+    let window: WindowModel
     @State private var choosing = false
 
     var body: some View {
@@ -486,8 +532,8 @@ struct AccountSwitcher: View {
             choosing = true
         } label: {
             HStack(spacing: 8) {
-                AccountLabel(model: model, account: model.currentAccount)
-                StatusDot(attention: model.attentionElsewhere)
+                AccountLabel(model: model, account: window.account)
+                StatusDot(attention: window.attentionElsewhere)
                     .help("Another account has a session that needs you")
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption)
@@ -498,10 +544,11 @@ struct AccountSwitcher: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+        .background(model.theme(of: window.account).color.opacity(0.14))
         .background(.bar)
         .overlay(alignment: .top) { Divider() }
         .popover(isPresented: $choosing, arrowEdge: .top) {
-            AccountList(model: model) { choosing = false }
+            AccountList(model: model, window: window) { choosing = false }
         }
         .help("Switch account")
     }
@@ -509,29 +556,48 @@ struct AccountSwitcher: View {
 
 struct AccountList: View {
     let model: AppModel
+    let window: WindowModel
     let done: () -> Void
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(model.accounts) { account in
-                Button {
-                    model.switchAccount(to: account)
-                    done()
-                } label: {
-                    HStack(spacing: 8) {
-                        AccountLabel(model: model, account: account)
-                        StatusDot(attention: model.attention(of: account))
-                            .frame(width: 10)
-                        Image(systemName: "checkmark")
-                            .font(.caption.weight(.semibold))
-                            .opacity(account == model.currentAccount ? 1 : 0)
+                HStack(spacing: 4) {
+                    Button {
+                        window.switchAccount(to: account)
+                        done()
+                    } label: {
+                        HStack(spacing: 8) {
+                            AccountLabel(model: model, account: account)
+                            StatusDot(attention: model.attention(of: account))
+                                .frame(width: 10)
+                            Image(systemName: "checkmark")
+                                .font(.caption.weight(.semibold))
+                                .opacity(account == window.account ? 1 : 0)
+                        }
+                        .padding(.leading, 8)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    Button {
+                        done()
+                        openWindow(id: WindowRoot.id, value: account.id)
+                    } label: {
+                        Image(systemName: "macwindow.badge.plus")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open in a new window")
                 }
-                .buttonStyle(.plain)
             }
+            Divider()
+                .padding(.vertical, 4)
+            ThemePicker(model: model, account: window.account)
+                .padding(.horizontal, 8)
             Divider()
                 .padding(.vertical, 4)
             Button {
@@ -539,7 +605,7 @@ struct AccountList: View {
                 Task { @MainActor in
                     guard let folder = AccountFolderPanel.choose() else { return }
                     await model.addAccountFolder(folder)
-                    model.switchAccount(to: ClaudeAccount(configDirectory: folder))
+                    window.switchAccount(to: ClaudeAccount(configDirectory: folder))
                 }
             } label: {
                 Label("Add Account…", systemImage: "plus")
@@ -549,7 +615,38 @@ struct AccountList: View {
             .buttonStyle(.plain)
         }
         .padding(8)
-        .frame(width: 300)
+        .frame(width: 320)
+    }
+}
+
+struct ThemePicker: View {
+    let model: AppModel
+    let account: ClaudeAccount
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Color")
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            ForEach(AccountTheme.allCases) { theme in
+                Button {
+                    model.setTheme(theme, for: account)
+                } label: {
+                    Circle()
+                        .fill(theme.color)
+                        .frame(width: 16, height: 16)
+                        .overlay {
+                            if model.theme(of: account) == theme {
+                                Circle().strokeBorder(.primary.opacity(0.7), lineWidth: 2).padding(-3)
+                            }
+                        }
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(theme.name)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -559,7 +656,7 @@ struct AccountLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            AccountAvatar(name: model.name(of: account))
+            AccountAvatar(name: model.name(of: account), color: model.theme(of: account).color)
             VStack(alignment: .leading, spacing: 1) {
                 Text(verbatim: model.name(of: account))
                     .lineLimit(1)
@@ -574,16 +671,15 @@ struct AccountLabel: View {
 }
 
 struct AccountAvatar: View {
-    static let colors: [Color] = [.orange, .teal, .indigo, .pink, .green, .brown]
-
     let name: String
+    let color: Color
 
     var body: some View {
         Text(verbatim: name.first.map { String($0).uppercased() } ?? "?")
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: 24, height: 24)
-            .background(Self.colors[Int(name.unicodeScalars.reduce(UInt(0)) { $0 &* 31 &+ UInt($1.value) } % UInt(Self.colors.count))], in: Circle())
+            .background(color, in: Circle())
     }
 }
 
@@ -788,11 +884,12 @@ struct RecentRow: View {
 
 struct AllSessionsView: View {
     let model: AppModel
+    let window: WindowModel
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
 
     private var groups: [(name: String, sessions: [PastSession])] {
-        let matching = model.visibleRecent.filter { past in
+        let matching = window.visibleRecent.filter { past in
             query.isEmpty
                 || past.title.localizedCaseInsensitiveContains(query)
                 || past.projectName.localizedCaseInsensitiveContains(query)
@@ -810,7 +907,7 @@ struct AllSessionsView: View {
                     Section {
                         ForEach(group.sessions) { past in
                             Button {
-                                model.open(past)
+                                window.open(past)
                                 dismiss()
                             } label: {
                                 HStack(spacing: 6) {
@@ -851,6 +948,7 @@ struct AllSessionsView: View {
 
 struct NewSessionView: View {
     @Bindable var model: AppModel
+    let window: WindowModel
     @Environment(\.dismiss) private var dismiss
     @State private var folder: URL?
     @State private var accountID = ClaudeAccount.standard.id
@@ -909,7 +1007,7 @@ struct NewSessionView: View {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Start") {
                     guard let folder, let account = model.accounts.first(where: { $0.id == accountID }) else { return }
-                    model.startSession(in: folder, account: account, permissionMode: permissionMode, worktree: worktree && isRepository)
+                    window.startSession(in: folder, account: account, permissionMode: permissionMode, worktree: worktree && isRepository)
                     dismiss()
                 }
                 .disabled(folder == nil)
@@ -918,7 +1016,7 @@ struct NewSessionView: View {
         .onAppear {
             folder = model.lastFolder
             permissionMode = model.lastPermissionMode
-            accountID = model.currentAccount.id
+            accountID = window.account.id
             worktree = isRepository
         }
         .onChange(of: folder) {

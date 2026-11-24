@@ -5,6 +5,7 @@ import SwiftUI
 struct SessionView: View {
     let session: Session
     let model: AppModel
+    let window: WindowModel
     @State private var draft = ""
     @AppStorage("showingSidePane") private var showingSidePane = true
 
@@ -16,7 +17,7 @@ struct SessionView: View {
                     PermissionCard(request: request, session: session)
                 }
                 if session.status == .dormant {
-                    ResumeBar(session: session, model: model)
+                    ResumeBar(session: session, model: model, window: window)
                 }
                 if case .ended(let reason) = session.status {
                     EndedBanner(reason: reason)
@@ -38,12 +39,12 @@ struct SessionView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
-                    HandOffButtons(model: model, session: session)
+                    HandOffButtons(model: model, window: window, session: session)
                 } label: {
                     Label("Continue in Another Account", systemImage: "arrow.triangle.branch")
                 }
                 .help("Move this conversation to another account")
-                .disabled(!model.canHandOff(session) || model.accounts.count < 2)
+                .disabled(!model.canHandOff(session))
                 UsageView(windows: session.usage)
                 Label(session.info?.account?.email ?? session.accountName, systemImage: "person.crop.circle")
                     .labelStyle(.titleAndIcon)
@@ -531,6 +532,7 @@ struct UsageView: View {
 struct ResumeBar: View {
     let session: Session
     let model: AppModel
+    let window: WindowModel
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -556,7 +558,7 @@ struct ResumeBar: View {
                     get: { model.account(named: session.configuration.configDirectory).id },
                     set: { id in
                         if let account = model.accounts.first(where: { $0.id == id }) {
-                            model.handOff(session, to: account)
+                            window.handOff(session, to: account)
                         }
                     }
                 )) {
