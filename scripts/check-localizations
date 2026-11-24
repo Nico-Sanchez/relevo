@@ -2,9 +2,19 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-strings="build/localization/strings"
 rm -rf build/localization
-mkdir -p "$strings"
-swift build --scratch-path build/localization/build --product Relevo \
-    -Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path -Xswiftc "$PWD/$strings" >/dev/null
-swift scripts/check-localizations.swift "$strings" Resources/Localization
+
+check() {
+    local product="$1" resources="$2"
+    local strings="build/localization/$product"
+    mkdir -p "$strings"
+    swift build --scratch-path build/localization/build --product "$product" \
+        -Xswiftc -emit-localized-strings -Xswiftc -emit-localized-strings-path -Xswiftc "$PWD/$strings" >/dev/null
+    echo "$product:"
+    swift scripts/check-localizations.swift "$strings" "$resources"
+}
+
+status=0
+check Relevo Resources/Localization || status=1
+check RelevoCode Resources/CodeLocalization || status=1
+exit $status

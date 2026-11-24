@@ -1,0 +1,36 @@
+#!/bin/bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+app="build/Relevo Code.app"
+open=false
+
+for argument in "$@"; do
+    case "$argument" in
+        --open) open=true ;;
+        *) echo "usage: scripts/build-code-app [--open]" >&2; exit 64 ;;
+    esac
+done
+
+swift build -c release --product RelevoCode
+binary="$(swift build -c release --show-bin-path)/RelevoCode"
+
+rm -rf "$app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp "$binary" "$app/Contents/MacOS/RelevoCode"
+cp Resources/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
+plist="$app/Contents/Info.plist"
+cp Resources/Info.plist "$plist"
+plutil -replace CFBundleExecutable -string RelevoCode "$plist"
+plutil -replace CFBundleIdentifier -string dev.nicosanchez.relevo.code "$plist"
+plutil -replace CFBundleName -string "Relevo Code" "$plist"
+plutil -replace CFBundleDisplayName -string "Relevo Code" "$plist"
+plutil -remove LSUIElement "$plist"
+cp -R Resources/CodeLocalization/*.lproj "$app/Contents/Resources/"
+codesign --force --sign - "$app"
+
+if $open; then
+    pkill -x RelevoCode || true
+    open "$app"
+fi
+echo "$app"
