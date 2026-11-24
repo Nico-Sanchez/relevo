@@ -91,6 +91,20 @@ import Testing
         #expect(tool(session)?.state == .denied)
     }
 
+    @Test func answeringAQuestionLetsTheTurnGoOn() throws {
+        let session = makeSession()
+        session.apply(event(#"""
+        {"type":"control_request","request_id":"ask-1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Color?","options":[{"label":"Red"}],"multiSelect":false}]},"tool_use_id":"toolu_q"}}
+        """#))
+        #expect(session.status == .waitingForPermission)
+        let request = try #require(session.pendingPermissions.first)
+
+        session.respond(request, .answer(["Color?": "Red"]))
+
+        #expect(session.pendingPermissions.isEmpty)
+        #expect(session.status == .working)
+    }
+
     @Test func remembersWhenTheLastTurnEnded() {
         let session = makeSession()
         session.apply(.status("requesting"))

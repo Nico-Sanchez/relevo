@@ -105,6 +105,50 @@ let toolResultLine = #"""
         #expect(deny["message"] as? String == "No")
     }
 
+    @Test func readsClaudesQuestionsAndAnswersThem() throws {
+        let line = #"""
+        {"type":"control_request","request_id":"ask-1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","display_name":"AskUserQuestion","input":{"questions":[{"question":"Which color do you prefer?","header":"Color","options":[{"label":"Red","description":"Choose red"},{"label":"Blue"}],"multiSelect":false},{"question":"Which days?","options":[{"label":"Mon"},{"label":"Tue"}],"multiSelect":true}]},"tool_use_id":"toolu_9","requires_user_interaction":true}}
+        """#
+        guard case .permissionRequest(let request) = event(line) else {
+            Issue.record("not a permission request")
+            return
+        }
+        let questions = try #require(request.questions)
+        #expect(questions.map(\.question) == ["Which color do you prefer?", "Which days?"])
+        #expect(questions[0].header == "Color")
+        #expect(questions[0].options.map(\.label) == ["Red", "Blue"])
+        #expect(questions[0].options[0].description == "Choose red")
+        #expect(!questions[0].multiSelect)
+        #expect(questions[1].multiSelect)
+
+        let answers = ["Which color do you prefer?": "Blue", "Which days?": "Mon, Tue"]
+        let reply = try #require((Wire.permissionResponse(to: request, decision: .answer(answers))["response"] as? [String: Any])?["response"] as? [String: Any])
+        let input = try #require(reply["updatedInput"] as? [String: Any])
+        #expect(reply["behavior"] as? String == "allow")
+        #expect(input["answers"] as? [String: String] == answers)
+        #expect((input["questions"] as? [[String: Any]])?.count == 2)
+
+        guard case .permissionRequest(let other) = event(permissionLine) else { return }
+        #expect(other.questions == nil)
+    }
+
+    @Test func buildsAnAnswerFromChoicesAndWrittenText() throws {
+        let line = #"""
+        {"type":"control_request","request_id":"ask-2","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Color?","options":[{"label":"Red"},{"label":"Blue"}],"multiSelect":false},{"question":"Days?","options":[{"label":"Mon"},{"label":"Tue"}],"multiSelect":true}]}}}
+        """#
+        guard case .permissionRequest(let request) = event(line) else { return }
+        let questions = try #require(request.questions)
+        let single = questions[0]
+        let multiple = questions[1]
+
+        #expect(single.answer(choosing: [], other: nil) == nil)
+        #expect(single.answer(choosing: ["Blue"], other: nil) == "Blue")
+        #expect(single.answer(choosing: ["Blue"], other: "  Green ") == "Green")
+        #expect(single.answer(choosing: [], other: "   ") == nil)
+        #expect(multiple.answer(choosing: ["Tue", "Mon"], other: nil) == "Mon, Tue")
+        #expect(multiple.answer(choosing: ["Tue"], other: "Fri") == "Tue, Fri")
+    }
+
     @Test func buildsTheCommandLineForEachSession() {
         let directory = URL(filePath: "/tmp/project")
         let plain = SessionConfiguration(directory: directory)

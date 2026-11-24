@@ -16,6 +16,7 @@ import Testing
         #expect(call("Grep", ["pattern": "TODO", "path": "/work/project/Sources"]).summary(relativeTo: project) == "TODO in Sources")
         #expect(call("WebFetch", ["url": "https://example.com"]).summary(relativeTo: project) == "https://example.com")
         #expect(call("mcp__x__thing", ["b": "second", "a": "first"]).summary(relativeTo: project) == "first")
+        #expect(call("AskUserQuestion", ["questions": [["question": "Which color?"], ["question": "Which day?"]]]).summary(relativeTo: project) == "Which color? · Which day?")
     }
 
     @Test func showsWhatAWriteAddsOnlyWhenThereIsNoPatch() {

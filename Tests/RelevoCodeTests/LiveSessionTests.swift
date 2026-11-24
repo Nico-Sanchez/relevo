@@ -117,6 +117,24 @@ struct LiveSessionTests {
         #expect(lastReply(session)?.lowercased().contains("received") == true)
     }
 
+    @Test func answersAQuestionFromClaude() async throws {
+        let (folder, token) = try makeFolder()
+        defer { cleanUp(folder, token: token) }
+        let session = try session(SessionConfiguration(directory: folder, configDirectory: account, model: "haiku"))
+        defer { session.stop() }
+        session.start()
+        try await waitUntil { session.status == .idle }
+
+        session.send("Use the AskUserQuestion tool to ask me exactly one question: 'Which color do you prefer?' with the options Red and Blue. After I answer, reply with only the color I chose, nothing else.")
+        try await waitUntil { session.pendingPermissions.first?.questions != nil }
+        let request = try #require(session.pendingPermissions.first)
+        let question = try #require(request.questions?.first)
+        session.respond(request, .answer([question.question: "Blue"]))
+        try await waitUntil { session.status == .idle }
+
+        #expect(lastReply(session)?.contains("Blue") == true)
+    }
+
     @Test func changesModelEffortAndModeWhileRunning() async throws {
         let (folder, token) = try makeFolder()
         defer { cleanUp(folder, token: token) }

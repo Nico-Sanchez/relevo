@@ -286,6 +286,52 @@ struct ResizeRenderTests {
         }
     }
 
+    @Test func rendersClaudesQuestions() async throws {
+        _ = NSApplication.shared
+        let model = AppModel()
+        let session = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")), accountName: "ana@example.com", title: "Release notes")
+        session.append(.user("Prepare the release notes for 2.4."))
+        session.apply(.permissionRequest(PermissionRequest(
+            id: "ask-1", toolName: "AskUserQuestion", displayName: "AskUserQuestion",
+            input: JSONValue([
+                "questions": [
+                    [
+                        "question": "Which audience are these notes for?", "header": "Audience", "multiSelect": false,
+                        "options": [
+                            ["label": "Customers", "description": "Plain language, only visible changes"],
+                            ["label": "Developers", "description": "Include API changes and migrations"],
+                        ],
+                    ],
+                    [
+                        "question": "Where should I publish them?", "header": "Channels", "multiSelect": true,
+                        "options": [["label": "GitHub release"], ["label": "Changelog file"], ["label": "Slack"]],
+                    ],
+                ],
+            ]),
+            description: nil, suggestions: [], toolUseID: "toolu_ask"
+        )))
+        model.sessions = [session]
+        let scene = WindowModel(app: model, accountID: nil)
+        scene.selection = .open(session.id)
+        UserDefaults.standard.set(false, forKey: "showingSidePane")
+        defer { UserDefaults.standard.set(true, forKey: "showingSidePane") }
+
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            let hosting = NSHostingView(rootView: ContentView(model: model, window: scene))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 720), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: appearance)
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            try await Task.sleep(for: .milliseconds(900))
+            let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+            hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+            try #require(bitmap.representation(using: .png, properties: [:]))
+                .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-question-\(name).png"))
+            window.close()
+        }
+    }
+
     @Test func rendersTheAccountList() async throws {
         _ = NSApplication.shared
         let (model, scene) = narrow()

@@ -14,7 +14,12 @@ struct SessionView: View {
             Transcript(session: session)
             VStack(spacing: 8) {
                 if let request = session.pendingPermissions.first {
-                    PermissionCard(request: request, session: session)
+                    if let questions = request.questions {
+                        QuestionCard(request: request, questions: questions, session: session)
+                            .id(request.id)
+                    } else {
+                        PermissionCard(request: request, session: session)
+                    }
                 }
                 if session.status == .dormant {
                     ResumeBar(session: session, model: model, window: window)
@@ -220,6 +225,7 @@ struct ToolCallView: View {
         case "WebFetch", "WebSearch": "globe"
         case "Task", "Agent": "person.2"
         case "TodoWrite": "checklist"
+        case "AskUserQuestion": "questionmark.bubble"
         default: "wrench.and.screwdriver"
         }
     }
@@ -377,6 +383,154 @@ struct PermissionCard: View {
         .padding(14)
         .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.orange.opacity(0.4)))
+    }
+}
+
+struct QuestionCard: View {
+    static let color = Color(red: 0.26, green: 0.52, blue: 0.87)
+
+    let request: PermissionRequest
+    let questions: [Question]
+    let session: Session
+    @State private var chosen: [Int: Set<String>] = [:]
+    @State private var writing: Set<Int> = []
+    @State private var written: [Int: String] = [:]
+
+    private var answers: [String: String]? {
+        var answers: [String: String] = [:]
+        for (index, question) in questions.enumerated() {
+            let other = writing.contains(index) ? written[index] : nil
+            guard let answer = question.answer(choosing: chosen[index] ?? [], other: other) else { return nil }
+            answers[question.question] = answer
+        }
+        return answers
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "questionmark.bubble.fill").foregroundStyle(Self.color)
+                Text(questions.count == 1 ? String(localized: "Claude has a question") : String(localized: "Claude has \(questions.count) questions"))
+                    .fontWeight(.semibold)
+            }
+            Capped(maxHeight: 360) {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(Array(questions.enumerated()), id: \.offset) { index, question in
+                        questionView(question, at: index)
+                    }
+                }
+            }
+            HStack {
+                Button("Skip", role: .cancel) { session.respond(request, .deny("The user chose not to answer.")) }
+                    .keyboardShortcut(.escape, modifiers: [])
+                Spacer()
+                Button("Answer") {
+                    if let answers {
+                        session.respond(request, .answer(answers))
+                    }
+                }
+                .keyboardShortcut(.return, modifiers: [.command])
+                .buttonStyle(.borderedProminent)
+                .tint(Self.color)
+                .disabled(answers == nil)
+            }
+        }
+        .padding(14)
+        .background(Self.color.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Self.color.opacity(0.4)))
+    }
+
+    private func questionView(_ question: Question, at index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let header = question.header {
+                Text(verbatim: header.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Text(verbatim: question.question)
+                .fontWeight(.medium)
+                .padding(.bottom, 2)
+            ForEach(question.options, id: \.label) { option in
+                OptionRow(
+                    title: option.label, detail: option.description, multiple: question.multiSelect,
+                    selected: chosen[index]?.contains(option.label) == true
+                ) {
+                    choose(option.label, for: question, at: index)
+                }
+            }
+            OptionRow(title: String(localized: "Other"), detail: nil, multiple: question.multiSelect, selected: writing.contains(index)) {
+                writeOther(for: question, at: index)
+            }
+            if writing.contains(index) {
+                TextField("Your answer", text: Binding(get: { written[index] ?? "" }, set: { written[index] = $0 }))
+                    .textFieldStyle(.roundedBorder)
+                    .padding(.leading, 28)
+            }
+        }
+    }
+
+    private func choose(_ label: String, for question: Question, at index: Int) {
+        if question.multiSelect {
+            var labels = chosen[index] ?? []
+            if labels.remove(label) == nil {
+                labels.insert(label)
+            }
+            chosen[index] = labels
+        } else {
+            chosen[index] = [label]
+            writing.remove(index)
+        }
+    }
+
+    private func writeOther(for question: Question, at index: Int) {
+        if question.multiSelect, writing.contains(index) {
+            writing.remove(index)
+        } else {
+            writing.insert(index)
+            if !question.multiSelect {
+                chosen[index] = []
+            }
+        }
+    }
+}
+
+struct OptionRow: View {
+    let title: String
+    let detail: String?
+    let multiple: Bool
+    let selected: Bool
+    let action: () -> Void
+
+    private var symbol: String {
+        switch (multiple, selected) {
+        case (true, true): "checkmark.square.fill"
+        case (true, false): "square"
+        case (false, true): "largecircle.fill.circle"
+        case (false, false): "circle"
+        }
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: symbol)
+                    .foregroundStyle(selected ? QuestionCard.color : .secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(verbatim: title)
+                    if let detail {
+                        Text(verbatim: detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(selected ? QuestionCard.color.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 7))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

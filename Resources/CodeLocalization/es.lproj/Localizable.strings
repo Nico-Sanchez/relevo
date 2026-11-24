@@ -14,6 +14,7 @@
 "Allow %@?" = "¿Permitir %@?";
 "Allow edits this session" = "Permitir ediciones en esta sesión";
 "Another account has a session that needs you" = "Otra cuenta tiene una sesión que te necesita";
+"Answer" = "Responder";
 "As a copy" = "Como copia";
 "Ask before acting" = "Preguntar antes de actuar";
 "Ask Claude to do something…" = "Pedile algo a Claude…";
@@ -36,6 +37,8 @@
 "Claude Code isn't installed, or it isn't on your shell's PATH." = "Claude Code no está instalado o no está en el PATH de tu shell.";
 "Claude Code isn't installed." = "Claude Code no está instalado.";
 "Claude Code refused it." = "Claude Code lo rechazó.";
+"Claude has %lld questions" = "Claude tiene %lld preguntas";
+"Claude has a question" = "Claude tiene una pregunta";
 "Close" = "Cerrar";
 "Close Session" = "Cerrar la sesión";
 "Closed pull request" = "Pull request cerrado";
@@ -86,6 +89,7 @@
 "Open pull request" = "Pull request abierto";
 "Open this session's folder in Ghostty" = "Abrir la carpeta de esta sesión en Ghostty";
 "Orange" = "Naranja";
+"Other" = "Otra";
 "Pane" = "Panel";
 "Permissions" = "Permisos";
 "Pink" = "Rosa";
@@ -107,6 +111,7 @@
 "Send (Return)" = "Enviar (Return)";
 "Send a message to continue this session…" = "Mandá un mensaje para retomar esta sesión…";
 "Show changes and the pull request" = "Mostrar los cambios y el pull request";
+"Skip" = "Omitir";
 "Start" = "Empezar";
 "Start a new session, or pick a recent one to continue it." = "Empezá una sesión nueva o elegí una reciente para retomarla.";
 "Starting Claude Code" = "Iniciando Claude Code";
@@ -128,4 +133,5 @@
 "When CI fails, a collaborator leaves feedback or the branch conflicts, this session gets a message to fix it, commit and push." = "Cuando falla el CI, un colaborador deja feedback o el branch tiene conflictos, esta sesión recibe un mensaje para arreglarlo, commitear y pushear.";
 "Work in a new worktree" = "Trabajar en un worktree nuevo";
 "Working" = "Trabajando";
+"Your answer" = "Tu respuesta";
 "Your next message continues it in" = "Tu próximo mensaje la retoma en";

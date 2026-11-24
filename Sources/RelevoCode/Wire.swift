@@ -41,6 +41,42 @@ public struct PermissionRequest: Sendable, Equatable, Identifiable {
     public var allowsEditsForSession: Bool {
         suggestions.contains { $0["type"]?.string == "setMode" && $0["mode"]?.string == "acceptEdits" }
     }
+
+    public var questions: [Question]? {
+        guard toolName == "AskUserQuestion", let questions = input["questions"]?.array else { return nil }
+        let parsed = questions.compactMap(Question.init)
+        return parsed.isEmpty ? nil : parsed
+    }
+}
+
+public struct Question: Sendable, Equatable {
+    public struct Option: Sendable, Equatable {
+        public let label: String
+        public let description: String?
+    }
+
+    public let question: String
+    public let header: String?
+    public let options: [Option]
+    public let multiSelect: Bool
+
+    init?(_ value: JSONValue) {
+        guard let question = value["question"]?.string else { return nil }
+        self.question = question
+        header = value["header"]?.string
+        options = (value["options"]?.array ?? []).compactMap { option in
+            option["label"]?.string.map { Option(label: $0, description: option["description"]?.string) }
+        }
+        multiSelect = value["multiSelect"]?.bool ?? false
+    }
+
+    public func answer(choosing labels: Set<String>, other: String?) -> String? {
+        let chosen = options.map(\.label).filter(labels.contains)
+        let written = other?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let parts = multiSelect ? chosen + [written] : [written.isEmpty ? chosen.first ?? "" : written]
+        let answer = parts.filter { !$0.isEmpty }.joined(separator: ", ")
+        return answer.isEmpty ? nil : answer
+    }
 }
 
 public struct DiffHunk: Sendable, Equatable {
@@ -253,6 +289,13 @@ public enum Wire {
                 "updatedInput": request.input.any,
                 "updatedPermissions": request.suggestions.filter { $0["type"]?.string == "setMode" }.map(\.any),
             ]
+        case .answer(let answers):
+            var input = request.input
+            if case .object(var fields) = input {
+                fields["answers"] = .object(answers.mapValues(JSONValue.string))
+                input = .object(fields)
+            }
+            response = ["behavior": "allow", "updatedInput": input.any]
         case .deny(let reason):
             response = ["behavior": "deny", "message": reason]
         }
@@ -263,5 +306,6 @@ public enum Wire {
 public enum PermissionDecision: Sendable, Equatable {
     case allow
     case allowEditsForSession
+    case answer([String: String])
     case deny(String)
 }

@@ -14,6 +14,8 @@ extension ToolCall {
             return input["query"]?.string ?? ""
         case "Task", "Agent":
             return input["description"]?.string ?? ""
+        case "AskUserQuestion":
+            return (input["questions"]?.array ?? []).compactMap { $0["question"]?.string }.joined(separator: " · ")
         default:
             if let path {
                 return relative(path, to: directory)
