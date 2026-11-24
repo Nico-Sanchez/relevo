@@ -339,17 +339,24 @@ final class AppModel {
 struct ContentView: View {
     let model: AppModel
     @Bindable var window: WindowModel
+    @State private var titlebarHeight: CGFloat = 0
 
     var body: some View {
         let theme = model.theme(of: window.account)
         NavigationSplitView {
             SidebarView(model: model, window: window)
                 .navigationSplitViewColumnWidth(min: 200, ideal: 250, max: 380)
-                .accountTint(theme.color)
         } detail: {
             detail
-                .accountTint(theme.color)
         }
+        .overlay(alignment: .top) {
+            Color(nsColor: .windowBackgroundColor)
+                .overlay(theme.color.opacity(0.35))
+                .frame(height: titlebarHeight)
+                .ignoresSafeArea(edges: .top)
+                .allowsHitTesting(false)
+        }
+        .background { TitlebarHeight(height: $titlebarHeight) }
         .tint(theme.color)
         .sheet(isPresented: $window.showingNewSession) {
             NewSessionView(model: model, window: window)
@@ -390,18 +397,40 @@ struct ContentView: View {
     }
 }
 
-extension View {
-    func accountTint(_ color: Color) -> some View {
-        overlay {
-            GeometryReader { proxy in
-                let inset = proxy.safeAreaInsets.top
-                color.opacity(0.35)
-                    .frame(height: inset)
-                    .frame(maxHeight: .infinity, alignment: .top)
-                    .offset(y: -inset)
+struct TitlebarHeight: NSViewRepresentable {
+    @Binding var height: CGFloat
+
+    func makeNSView(context: Context) -> TitlebarProbe {
+        TitlebarProbe()
+    }
+
+    func updateNSView(_ probe: TitlebarProbe, context: Context) {
+        probe.report = { value in
+            if height != value {
+                height = value
             }
-            .allowsHitTesting(false)
         }
+    }
+}
+
+final class TitlebarProbe: NSView {
+    var report: (CGFloat) -> Void = { _ in }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.titlebarAppearsTransparent = true
+        measure()
+    }
+
+    override func layout() {
+        super.layout()
+        measure()
+    }
+
+    private func measure() {
+        guard let window, let content = window.contentView else { return }
+        let height = max(0, content.frame.height - window.contentLayoutRect.height)
+        Task { @MainActor [weak self] in self?.report(height) }
     }
 }
 

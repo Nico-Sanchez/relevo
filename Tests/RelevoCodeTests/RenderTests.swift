@@ -263,9 +263,10 @@ struct ResizeRenderTests {
     @Test func rendersEachAccountInItsOwnColor() async throws {
         _ = NSApplication.shared
         let (model, _) = narrow()
-        for (account, appearance) in zip(model.accounts, [NSAppearance.Name.aqua, .darkAqua]) {
+        let variants = zip(model.accounts, [NSAppearance.Name.aqua, .darkAqua]).map { ($0, $1, true) } + [(ClaudeAccount.standard, NSAppearance.Name.aqua, false)]
+        for (account, appearance, selecting) in variants {
             let scene = WindowModel(app: model, accountID: account.id)
-            scene.selection = scene.visibleSessions.first.map { .open($0.id) }
+            scene.selection = selecting ? scene.visibleSessions.first.map { .open($0.id) } : nil
             let hosting = NSHostingView(rootView: ContentView(model: model, window: scene))
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1000, height: 560),
@@ -280,7 +281,7 @@ struct ResizeRenderTests {
             let bitmap = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
             frame.cacheDisplay(in: frame.bounds, to: bitmap)
             try #require(bitmap.representation(using: .png, properties: [:]))
-                .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-theme-\(model.theme(of: account).rawValue).png"))
+                .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-theme-\(model.theme(of: account).rawValue)\(selecting ? "" : "-empty").png"))
             window.close()
         }
     }
