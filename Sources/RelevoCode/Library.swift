@@ -9,11 +9,27 @@ public struct PastSession: Sendable, Equatable, Identifiable {
     public let branch: String?
 
     public var projectName: String {
+        guard let worktree = worktreeName else { return directory.lastPathComponent }
+        return "\(repositoryName) · \(worktree)"
+    }
+
+    public var repositoryName: String {
         let parts = directory.pathComponents
-        if let marker = parts.lastIndex(of: "worktrees"), marker >= 2, parts[marker - 1] == ".claude" {
-            return "\(parts[marker - 2]) · \(parts[parts.index(after: marker)...].joined(separator: "/"))"
+        if let marker = worktreeMarker, marker >= 2 {
+            return parts[marker - 2]
         }
         return directory.lastPathComponent
+    }
+
+    public var worktreeName: String? {
+        guard let marker = worktreeMarker else { return nil }
+        return directory.pathComponents[(marker + 1)...].joined(separator: "/")
+    }
+
+    private var worktreeMarker: Int? {
+        let parts = directory.pathComponents
+        guard let marker = parts.lastIndex(of: "worktrees"), marker >= 1, parts[marker - 1] == ".claude", marker + 1 < parts.count else { return nil }
+        return marker
     }
 }
 
@@ -99,6 +115,19 @@ public enum SessionLibrary {
             lastActivity: lastActivity,
             branch: branch
         )
+    }
+
+    public static func relevant(
+        _ sessions: [PastSession], desktop: [String: DesktopSession],
+        exists: (URL) -> Bool = { FileManager.default.fileExists(atPath: $0.path) }
+    ) -> [PastSession] {
+        let temporary = ["/tmp/", "/private/tmp/", "/var/folders/", "/private/var/folders/"]
+        return sessions.filter { session in
+            let path = session.directory.path + "/"
+            return desktop[session.id]?.isArchived != true
+                && !temporary.contains(where: path.hasPrefix)
+                && exists(session.directory)
+        }
     }
 
     public static func desktopSessions(in folder: URL? = nil) -> [String: DesktopSession] {

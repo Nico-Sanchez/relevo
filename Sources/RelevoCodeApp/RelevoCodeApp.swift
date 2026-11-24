@@ -104,7 +104,8 @@ final class AppModel {
     func refreshRecent() async {
         let directories = SessionLibrary.projectDirectories(for: accounts)
         let (recent, desktop) = await Task.detached {
-            (SessionLibrary.recent(in: directories), SessionLibrary.desktopSessions())
+            let desktop = SessionLibrary.desktopSessions()
+            return (SessionLibrary.relevant(SessionLibrary.recent(in: directories, limit: 300), desktop: desktop), desktop)
         }.value
         self.recent = recent
         self.desktop = desktop
@@ -225,7 +226,11 @@ struct ContentView: View {
 }
 
 struct SidebarView: View {
+    static let recentLimit = 8
+
     @Bindable var model: AppModel
+    @AppStorage("recentExpanded") private var recentExpanded = true
+    @State private var showingAllSessions = false
 
     var body: some View {
         List(selection: $model.selection) {
@@ -242,9 +247,9 @@ struct SidebarView: View {
                     }
                 }
             }
-            Section("Recent") {
-                ForEach(model.recentNotOpen) { past in
-                    RecentRow(past: past, inDesktop: model.isOpenInDesktop(past.id))
+            Section("Recent", isExpanded: $recentExpanded) {
+                ForEach(model.recentNotOpen.prefix(Self.recentLimit)) { past in
+                    RecentRow(past: past)
                         .tag(SidebarItem.recent(past.id))
                         .contextMenu {
                             Menu("Continue in") {
@@ -254,7 +259,20 @@ struct SidebarView: View {
                             }
                         }
                 }
+                if model.recentNotOpen.count > Self.recentLimit {
+                    Button {
+                        showingAllSessions = true
+                    } label: {
+                        Text("See all \(model.recentNotOpen.count)…")
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 22)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
+        }
+        .sheet(isPresented: $showingAllSessions) {
+            AllSessionsView(model: model)
         }
         .toolbar {
             ToolbarItemGroup {
@@ -311,31 +329,87 @@ struct SessionRow: View {
 
 struct RecentRow: View {
     let past: PastSession
-    let inDesktop: Bool
+    var indent: CGFloat = 22
+    var showsRepository = true
+
+    private var place: String? {
+        showsRepository ? past.repositoryName : past.worktreeName
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(past.title)
+            Text(verbatim: past.title)
                 .lineLimit(1)
             HStack(spacing: 4) {
-                Text(past.projectName)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text("·")
-                Text(past.lastActivity, format: .relative(presentation: .named))
-                    .lineLimit(1)
-                if inDesktop {
-                    Text("Desktop")
-                        .padding(.horizontal, 5)
-                        .background(.quaternary, in: Capsule())
-                        .help("Still open in Claude Desktop")
+                if let place {
+                    Text(verbatim: place)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                    Text(verbatim: "·")
                 }
+                Text(past.lastActivity, format: .relative(presentation: .numeric, unitsStyle: .abbreviated))
+                    .lineLimit(1)
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
-        .padding(.leading, 22)
+        .padding(.leading, indent)
+        .help(Text(verbatim: "\(past.title)\n\(past.directory.path)"))
+    }
+}
+
+struct AllSessionsView: View {
+    let model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var query = ""
+
+    private var groups: [(name: String, sessions: [PastSession])] {
+        let matching = model.recentNotOpen.filter { past in
+            query.isEmpty
+                || past.title.localizedCaseInsensitiveContains(query)
+                || past.projectName.localizedCaseInsensitiveContains(query)
+        }
+        let grouped = Dictionary(grouping: matching, by: \.repositoryName)
+        return grouped
+            .map { (name: $0.key, sessions: $0.value) }
+            .sorted { ($0.sessions.first?.lastActivity ?? .distantPast) > ($1.sessions.first?.lastActivity ?? .distantPast) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(groups, id: \.name) { group in
+                    Section {
+                        ForEach(group.sessions) { past in
+                            Button {
+                                model.open(past)
+                                dismiss()
+                            } label: {
+                                RecentRow(past: past, indent: 0, showsRepository: false)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    } header: {
+                        Text(verbatim: "\(group.name) (\(group.sessions.count))")
+                    }
+                }
+            }
+            .overlay {
+                if groups.isEmpty {
+                    ContentUnavailableView.search(text: query)
+                }
+            }
+            .searchable(text: $query, placement: .toolbar, prompt: Text("Search sessions"))
+            .navigationTitle("All Sessions")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+            }
+        }
+        .frame(minWidth: 520, idealWidth: 600, minHeight: 480, idealHeight: 640)
     }
 }
 

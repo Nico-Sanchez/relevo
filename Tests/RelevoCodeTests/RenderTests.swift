@@ -203,12 +203,26 @@ struct ResizeRenderTests {
         model.selection = .open(session.id)
         model.recent = (1...9).map { index in
             PastSession(
-                id: "r\(index)", file: URL(filePath: "/x"), directory: URL(filePath: "/Users/ana/code/vertex/.claude/worktrees/branch-\(index)"),
+                id: "r\(index)", file: URL(filePath: "/x"), directory: URL(filePath: index.isMultiple(of: 3) ? "/Users/ana/code/relevo" : "/Users/ana/code/vertex/.claude/worktrees/branch-\(index)"),
                 title: "Principales en backoffice y facturación de pedidos número \(index)", lastActivity: .now.addingTimeInterval(Double(-600 * index)), branch: nil
             )
         }
         model.desktop = Dictionary(uniqueKeysWithValues: (1...9).map { ("r\($0)", DesktopSession(title: nil, isArchived: false)) })
         return model
+    }
+
+    @Test func rendersTheSessionFinder() async throws {
+        _ = NSApplication.shared
+        let hosting = NSHostingView(rootView: AllSessionsView(model: narrowModel()))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 560), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        try await Task.sleep(for: .milliseconds(800))
+        let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        try #require(bitmap.representation(using: .png, properties: [:]))
+            .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-finder.png"))
+        window.close()
     }
 
     @Test func fitsInANarrowWindowWithAndWithoutTheSidePane() async throws {

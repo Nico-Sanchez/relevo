@@ -61,6 +61,40 @@ let transcriptLines = [
         #expect(SessionLibrary.recent(in: pools, limit: 1).map(\.id) == ["newer"])
     }
 
+    @Test func keepsOnlySessionsWorthContinuing() {
+        func past(_ id: String, _ path: String) -> PastSession {
+            PastSession(id: id, file: URL(filePath: "/x"), directory: URL(filePath: path), title: id, lastActivity: .now, branch: nil)
+        }
+        let sessions = [
+            past("live", "/work/app"),
+            past("archived", "/work/app"),
+            past("open-in-desktop", "/work/app/.claude/worktrees/fix"),
+            past("probe", "/private/tmp/claude-501/scratch/proto"),
+            past("test", "/var/folders/6z/T/relevo-live-1"),
+            past("gone", "/work/removed-worktree"),
+        ]
+        let desktop = [
+            "archived": DesktopSession(title: nil, isArchived: true),
+            "open-in-desktop": DesktopSession(title: nil, isArchived: false),
+        ]
+
+        let kept = SessionLibrary.relevant(sessions, desktop: desktop) { $0.path != "/work/removed-worktree" }
+
+        #expect(kept.map(\.id) == ["live", "open-in-desktop"])
+    }
+
+    @Test func namesTheRepositoryAndWorktreeOfASession() {
+        let worktree = PastSession(id: "a", file: URL(filePath: "/x"), directory: URL(filePath: "/work/vertex/.claude/worktrees/fix-login"), title: "", lastActivity: .now, branch: nil)
+        let plain = PastSession(id: "b", file: URL(filePath: "/x"), directory: URL(filePath: "/work/relevo"), title: "", lastActivity: .now, branch: nil)
+
+        #expect(worktree.repositoryName == "vertex")
+        #expect(worktree.worktreeName == "fix-login")
+        #expect(worktree.projectName == "vertex · fix-login")
+        #expect(plain.repositoryName == "relevo")
+        #expect(plain.worktreeName == nil)
+        #expect(plain.projectName == "relevo")
+    }
+
     @Test func readsDesktopsSessionsByTheirCLIIdentifier() throws {
         let root = try temporaryFolder()
         let folder = root.appending(path: "account/org")
