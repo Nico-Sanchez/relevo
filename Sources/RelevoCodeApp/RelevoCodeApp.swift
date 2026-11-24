@@ -43,15 +43,21 @@ final class AppModel {
     var monitors: [Session.ID: PullRequestMonitor] = [:]
     var seen: [String: Date]
     private(set) var seenOpen: [Session.ID: Date] = [:]
+    private(set) var currentAccountID: String
+    private(set) var assigned: [String: String]
+    var owners: [String: String] = [:]
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
 
-    init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         accounts = [.standard] + (defaults.stringArray(forKey: "accountFolders") ?? []).map {
             ClaudeAccount(configDirectory: URL(filePath: $0))
         }
         seen = ((defaults.dictionary(forKey: "seenSessions") as? [String: Double]) ?? [:])
             .mapValues(Date.init(timeIntervalSince1970:))
+        currentAccountID = defaults.string(forKey: "currentAccount") ?? ClaudeAccount.standard.id
+        assigned = (defaults.dictionary(forKey: "sessionAccounts") as? [String: String]) ?? [:]
     }
 
     var selected: Session? {
@@ -59,9 +65,29 @@ final class AppModel {
         return sessions.first { $0.id == id }
     }
 
-    var recentNotOpen: [PastSession] {
+    var currentAccount: ClaudeAccount {
+        accounts.first { $0.id == currentAccountID } ?? accounts.first ?? .standard
+    }
+
+    var visibleSessions: [Session] {
+        sessions.filter { owner(of: $0) == currentAccount }
+    }
+
+    var visibleRecent: [PastSession] {
+        recent(of: currentAccount)
+    }
+
+    func recent(of account: ClaudeAccount) -> [PastSession] {
         let open = Set(sessions.compactMap(\.sessionID))
-        return recent.filter { !open.contains($0.id) }
+        return recent.filter { !open.contains($0.id) && owner(of: $0) == account.id }
+    }
+
+    func owner(of session: Session) -> ClaudeAccount {
+        account(named: session.configuration.configDirectory)
+    }
+
+    func owner(of past: PastSession) -> String? {
+        owners[past.id] ?? assigned[past.id] ?? accounts.first?.id
     }
 
     var lastFolder: URL? {
@@ -69,18 +95,9 @@ final class AppModel {
         set { defaults.set(newValue?.path, forKey: "lastFolder") }
     }
 
-    var lastAccountID: String? {
-        get { defaults.string(forKey: "lastAccount") }
-        set { defaults.set(newValue, forKey: "lastAccount") }
-    }
-
     var lastPermissionMode: String {
         get { defaults.string(forKey: "lastPermissionMode") ?? "default" }
         set { defaults.set(newValue, forKey: "lastPermissionMode") }
-    }
-
-    var preferredAccount: ClaudeAccount {
-        accounts.first { $0.id == lastAccountID } ?? .standard
     }
 
     func load() async {
@@ -118,16 +135,86 @@ final class AppModel {
 
     func refreshRecent() async {
         let directories = SessionLibrary.projectDirectories(for: accounts)
-        let (recent, desktop) = await Task.detached {
+        let (accounts, assigned) = (accounts, assigned)
+        let (recent, desktop, owners) = await Task.detached {
             let desktop = SessionLibrary.desktopSessions()
-            return (SessionLibrary.relevant(SessionLibrary.recent(in: directories, limit: 300), desktop: desktop), desktop)
+            let recent = SessionLibrary.relevant(SessionLibrary.recent(in: directories, limit: 300), desktop: desktop)
+            return (recent, desktop, SessionOwners.resolve(recent.map(\.id), accounts: accounts, assigned: assigned, desktop: desktop))
         }.value
         self.recent = recent
         self.desktop = desktop
+        self.owners = owners.merging(self.assigned) { $1 }
     }
 
     func name(of account: ClaudeAccount) -> String {
         accountInfo[account.id]?.email ?? account.folderName
+    }
+
+    func detail(of account: ClaudeAccount) -> String {
+        guard let info = accountInfo[account.id] else { return account.folderName }
+        return [info.organization, info.subscription?.capitalized].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    func switchAccount(to account: ClaudeAccount) {
+        currentAccountID = account.id
+        defaults.set(account.id, forKey: "currentAccount")
+        if let selected, owner(of: selected) != account {
+            selection = visibleSessions.first.map { .open($0.id) }
+        }
+    }
+
+    func attention(of account: ClaudeAccount) -> Attention? {
+        let marks = sessions.filter { owner(of: $0) == account }.compactMap(attention(of:))
+            + recent(of: account).compactMap(attention(of:))
+        return marks.contains(.waiting) ? .waiting : marks.first
+    }
+
+    var attentionElsewhere: Attention? {
+        let marks = accounts.filter { $0 != currentAccount }.compactMap(attention(of:))
+        return marks.contains(.waiting) ? .waiting : marks.first
+    }
+
+    func otherAccounts(than account: ClaudeAccount) -> [ClaudeAccount] {
+        accounts.filter { $0 != account }
+    }
+
+    func canHandOff(_ session: Session) -> Bool {
+        session.status == .dormant || (session.sessionID != nil && !session.isBusy)
+    }
+
+    func handOff(_ session: Session, to account: ClaudeAccount) {
+        guard account != owner(of: session), canHandOff(session), let id = session.sessionID else { return }
+        let moved: Session
+        if session.status == .dormant {
+            session.setAccount(configDirectory: account.configDirectory, name: name(of: account))
+            moved = session
+        } else {
+            guard let continuation = session.continuation(
+                configDirectory: account.configDirectory, accountName: name(of: account), fork: isOpenInDesktop(id)
+            ) else { return }
+            close(session)
+            show(continuation)
+            moved = continuation
+        }
+        if !moved.configuration.fork {
+            assign(id, to: account)
+        }
+        switchAccount(to: account)
+        selection = .open(moved.id)
+    }
+
+    func handOff(_ past: PastSession, to account: ClaudeAccount) {
+        if !isOpenInDesktop(past.id) {
+            assign(past.id, to: account)
+        }
+        switchAccount(to: account)
+        open(past, in: account)
+    }
+
+    private func assign(_ sessionID: String, to account: ClaudeAccount) {
+        assigned[sessionID] = account.id
+        owners[sessionID] = account.id
+        defaults.set(assigned, forKey: "sessionAccounts")
     }
 
     func account(named configDirectory: URL?) -> ClaudeAccount {
@@ -149,9 +236,9 @@ final class AppModel {
             worktree: worktree ? "session-\(UUID().uuidString.prefix(6).lowercased())" : nil
         )
         let session = Session(configuration: configuration, accountName: name(of: account), environment: environment ?? [:], executable: executable)
+        switchAccount(to: account)
         show(session)
         lastFolder = folder
-        lastAccountID = account.id
         lastPermissionMode = permissionMode
         session.start()
     }
@@ -161,7 +248,7 @@ final class AppModel {
             selection = .open(existing.id)
             return
         }
-        let account = account ?? preferredAccount
+        let account = account ?? currentAccount
         let configuration = SessionConfiguration(
             directory: past.directory, configDirectory: account.configDirectory, resume: past.id,
             fork: isOpenInDesktop(past.id), permissionMode: lastPermissionMode
@@ -175,11 +262,6 @@ final class AppModel {
             let entries = await Task.detached { History.entries(in: past.file) }.value
             session.loadHistory(entries)
         }
-    }
-
-    func continueSession(_ session: Session, in account: ClaudeAccount) {
-        guard let copy = session.continuation(configDirectory: account.configDirectory, accountName: name(of: account)) else { return }
-        show(copy)
     }
 
     func isOpenInDesktop(_ id: String?) -> Bool {
@@ -224,9 +306,12 @@ final class AppModel {
     func close(_ session: Session) {
         session.stop()
         monitors.removeValue(forKey: session.id)?.stop()
+        if session.status != .dormant, let id = session.sessionID {
+            assign(id, to: owner(of: session))
+        }
         sessions.removeAll { $0.id == session.id }
         if selection == .open(session.id) {
-            selection = sessions.first.map { .open($0.id) }
+            selection = visibleSessions.first.map { .open($0.id) }
         }
     }
 
@@ -288,9 +373,9 @@ struct SidebarView: View {
 
     var body: some View {
         List(selection: $model.selection) {
-            if !model.sessions.isEmpty {
+            if !model.visibleSessions.isEmpty {
                 Section("Open") {
-                    ForEach(model.sessions) { session in
+                    ForEach(model.visibleSessions) { session in
                         SidebarRow(
                             pullRequests: model.pullRequests(of: session),
                             attention: model.attention(of: session),
@@ -305,7 +390,8 @@ struct SidebarView: View {
                 }
             }
             Section("Recent", isExpanded: $recentExpanded) {
-                ForEach(model.recentNotOpen.prefix(Self.recentLimit)) { past in
+                let recent = model.visibleRecent
+                ForEach(recent.prefix(Self.recentLimit)) { past in
                     SidebarRow(pullRequests: model.pullRequests(of: past), attention: model.attention(of: past)) {
                         RecentRow(past: past)
                     } actions: {
@@ -313,16 +399,23 @@ struct SidebarView: View {
                     }
                     .tag(SidebarItem.recent(past.id))
                 }
-                if model.recentNotOpen.count > Self.recentLimit {
+                if recent.isEmpty {
+                    Text("No conversations in this account yet.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else if recent.count > Self.recentLimit {
                     Button {
                         showingAllSessions = true
                     } label: {
-                        Text("See all \(model.recentNotOpen.count)…")
+                        Text("See all \(recent.count)…")
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
                 }
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            AccountSwitcher(model: model)
         }
         .sheet(isPresented: $showingAllSessions) {
             AllSessionsView(model: model)
@@ -345,18 +438,14 @@ struct SidebarView: View {
     }
 }
 
-struct ContinueMenu: View {
+struct HandOffButtons: View {
     let model: AppModel
     let session: Session
 
     var body: some View {
-        Menu("Continue in Another Account") {
-            ForEach(model.accounts) { account in
-                Button(model.name(of: account)) { model.continueSession(session, in: account) }
-                    .disabled(account.configDirectory == session.configuration.configDirectory)
-            }
+        ForEach(model.otherAccounts(than: model.owner(of: session))) { account in
+            Button(model.name(of: account)) { model.handOff(session, to: account) }
         }
-        .disabled(session.sessionID == nil)
     }
 }
 
@@ -365,7 +454,10 @@ struct OpenSessionMenu: View {
     let session: Session
 
     var body: some View {
-        ContinueMenu(model: model, session: session)
+        Menu("Continue in Another Account") {
+            HandOffButtons(model: model, session: session)
+        }
+        .disabled(!model.canHandOff(session) || model.accounts.count < 2)
         Divider()
         Button("Close Session") { model.close(session) }
     }
@@ -376,11 +468,135 @@ struct RecentSessionMenu: View {
     let past: PastSession
 
     var body: some View {
-        Menu("Continue in") {
-            ForEach(model.accounts) { account in
-                Button(model.name(of: account)) { model.open(past, in: account) }
+        Menu("Continue in Another Account") {
+            ForEach(model.otherAccounts(than: model.currentAccount)) { account in
+                Button(model.name(of: account)) { model.handOff(past, to: account) }
             }
         }
+        .disabled(model.accounts.count < 2)
+    }
+}
+
+struct AccountSwitcher: View {
+    let model: AppModel
+    @State private var choosing = false
+
+    var body: some View {
+        Button {
+            choosing = true
+        } label: {
+            HStack(spacing: 8) {
+                AccountLabel(model: model, account: model.currentAccount)
+                StatusDot(attention: model.attentionElsewhere)
+                    .help("Another account has a session that needs you")
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.bar)
+        .overlay(alignment: .top) { Divider() }
+        .popover(isPresented: $choosing, arrowEdge: .top) {
+            AccountList(model: model) { choosing = false }
+        }
+        .help("Switch account")
+    }
+}
+
+struct AccountList: View {
+    let model: AppModel
+    let done: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(model.accounts) { account in
+                Button {
+                    model.switchAccount(to: account)
+                    done()
+                } label: {
+                    HStack(spacing: 8) {
+                        AccountLabel(model: model, account: account)
+                        StatusDot(attention: model.attention(of: account))
+                            .frame(width: 10)
+                        Image(systemName: "checkmark")
+                            .font(.caption.weight(.semibold))
+                            .opacity(account == model.currentAccount ? 1 : 0)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            Divider()
+                .padding(.vertical, 4)
+            Button {
+                done()
+                Task { @MainActor in
+                    guard let folder = AccountFolderPanel.choose() else { return }
+                    await model.addAccountFolder(folder)
+                    model.switchAccount(to: ClaudeAccount(configDirectory: folder))
+                }
+            } label: {
+                Label("Add Account…", systemImage: "plus")
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(8)
+        .frame(width: 300)
+    }
+}
+
+struct AccountLabel: View {
+    let model: AppModel
+    let account: ClaudeAccount
+
+    var body: some View {
+        HStack(spacing: 8) {
+            AccountAvatar(name: model.name(of: account))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(verbatim: model.name(of: account))
+                    .lineLimit(1)
+                Text(verbatim: model.detail(of: account))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+struct AccountAvatar: View {
+    static let colors: [Color] = [.orange, .teal, .indigo, .pink, .green, .brown]
+
+    let name: String
+
+    var body: some View {
+        Text(verbatim: name.first.map { String($0).uppercased() } ?? "?")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 24, height: 24)
+            .background(Self.colors[Int(name.unicodeScalars.reduce(UInt(0)) { $0 &* 31 &+ UInt($1.value) } % UInt(Self.colors.count))], in: Circle())
+    }
+}
+
+enum AccountFolderPanel {
+    @MainActor
+    static func choose() -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.showsHiddenFiles = true
+        panel.message = String(localized: "Choose a Claude Code config folder (the CLAUDE_CONFIG_DIR of a signed-in account).")
+        panel.prompt = String(localized: "Add")
+        return panel.runModal() == .OK ? panel.url : nil
     }
 }
 
@@ -533,7 +749,7 @@ struct SessionRow: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(session.title)
                 .lineLimit(1)
-            Text(verbatim: "\(session.workingDirectory.lastPathComponent) · \(session.accountName)")
+            Text(verbatim: session.workingDirectory.lastPathComponent)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -576,7 +792,7 @@ struct AllSessionsView: View {
     @State private var query = ""
 
     private var groups: [(name: String, sessions: [PastSession])] {
-        let matching = model.recentNotOpen.filter { past in
+        let matching = model.visibleRecent.filter { past in
             query.isEmpty
                 || past.title.localizedCaseInsensitiveContains(query)
                 || past.projectName.localizedCaseInsensitiveContains(query)
@@ -702,7 +918,7 @@ struct NewSessionView: View {
         .onAppear {
             folder = model.lastFolder
             permissionMode = model.lastPermissionMode
-            accountID = model.preferredAccount.id
+            accountID = model.currentAccount.id
             worktree = isRepository
         }
         .onChange(of: folder) {
@@ -722,13 +938,7 @@ struct NewSessionView: View {
     }
 
     private func addAccount() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.showsHiddenFiles = true
-        panel.message = "Choose a Claude Code config folder (the CLAUDE_CONFIG_DIR of a signed-in account)."
-        panel.prompt = "Add"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let url = AccountFolderPanel.choose() else { return }
         Task {
             await model.addAccountFolder(url)
             accountID = ClaudeAccount(configDirectory: url).id

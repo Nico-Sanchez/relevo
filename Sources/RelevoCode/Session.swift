@@ -201,10 +201,10 @@ public final class Session: Identifiable {
         process?.send(Wire.controlRequest(id: id, body))
     }
 
-    public func continuation(configDirectory: URL?, accountName: String) -> Session? {
+    public func continuation(configDirectory: URL?, accountName: String, fork: Bool) -> Session? {
         guard let sessionID else { return nil }
         let configuration = SessionConfiguration(
-            directory: workingDirectory, configDirectory: configDirectory, resume: sessionID, fork: true,
+            directory: workingDirectory, configDirectory: configDirectory, resume: sessionID, fork: fork,
             model: selectedModel, permissionMode: permissionMode, effort: effort
         )
         let stopped = items.map { item in

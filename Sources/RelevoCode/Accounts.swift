@@ -15,6 +15,28 @@ public struct ClaudeAccount: Sendable, Equatable, Identifiable, Hashable {
         configDirectory.map { $0.abbreviatingHome } ?? "~/.claude"
     }
 
+    var folder: URL {
+        configDirectory ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude")
+    }
+
+    public func accountUUID() -> String? {
+        let file = configDirectory?.appending(path: ".claude.json")
+            ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: ".claude.json")
+        guard let data = try? Data(contentsOf: file),
+              let object = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        return JSONValue(object)["oauthAccount"]?["accountUuid"]?.string
+    }
+
+    public func sessionRuns() -> [String: Date] {
+        let environments = folder.appending(path: "session-env")
+        let entries = (try? FileManager.default.contentsOfDirectory(at: environments, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        var runs: [String: Date] = [:]
+        for entry in entries {
+            runs[entry.lastPathComponent] = (try? entry.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+        }
+        return runs
+    }
+
     public func status(executable: URL, environment: [String: String]) async -> AccountInfo? {
         await Task.detached {
             let process = Process()

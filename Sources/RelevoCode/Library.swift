@@ -80,10 +80,11 @@ public struct DesktopSession: Sendable, Equatable {
     public let question: String?
     public let lastTurnEnded: Date?
     public let lastFocused: Date?
+    public let accountUUID: String?
 
     public init(
         title: String?, isArchived: Bool, pullRequests: [String: PullRequestState] = [:],
-        question: String? = nil, lastTurnEnded: Date? = nil, lastFocused: Date? = nil
+        question: String? = nil, lastTurnEnded: Date? = nil, lastFocused: Date? = nil, accountUUID: String? = nil
     ) {
         self.title = title
         self.isArchived = isArchived
@@ -91,6 +92,30 @@ public struct DesktopSession: Sendable, Equatable {
         self.question = question
         self.lastTurnEnded = lastTurnEnded
         self.lastFocused = lastFocused
+        self.accountUUID = accountUUID
+    }
+}
+
+public enum SessionOwners {
+    public static func resolve(
+        _ ids: [String], accounts: [ClaudeAccount], assigned: [String: String], desktop: [String: DesktopSession]
+    ) -> [String: String] {
+        guard let fallback = accounts.first?.id else { return [:] }
+        let known = Set(accounts.map(\.id))
+        let byUUID = Dictionary(accounts.compactMap { account in account.accountUUID().map { ($0, account.id) } }, uniquingKeysWith: { first, _ in first })
+        let runs = accounts.map { ($0.id, $0.sessionRuns()) }
+        var owners: [String: String] = [:]
+        for id in ids {
+            if let owner = assigned[id], known.contains(owner) {
+                owners[id] = owner
+            } else if let uuid = desktop[id]?.accountUUID, let owner = byUUID[uuid] {
+                owners[id] = owner
+            } else {
+                let latest = runs.compactMap { account, runs in runs[id].map { (account, $0) } }.max { $0.1 < $1.1 }
+                owners[id] = latest?.0 ?? fallback
+            }
+        }
+        return owners
     }
 }
 
@@ -218,7 +243,8 @@ public enum SessionLibrary {
                 pullRequests: Dictionary(pullRequests, uniquingKeysWith: { $1 }),
                 question: session["turnWrapUp"]?["needsUser"]?.string.flatMap { $0.isEmpty ? nil : $0 },
                 lastTurnEnded: date(session["lastTurnEdgeAt"]),
-                lastFocused: date(session["lastFocusedAt"])
+                lastFocused: date(session["lastFocusedAt"]),
+                accountUUID: file.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent
             )
         }
         return sessions

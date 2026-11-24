@@ -38,12 +38,12 @@ struct SessionView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
-                    ContinueMenu(model: model, session: session)
+                    HandOffButtons(model: model, session: session)
                 } label: {
                     Label("Continue in Another Account", systemImage: "arrow.triangle.branch")
                 }
-                .help("Continue this conversation in another account")
-                .disabled(session.sessionID == nil)
+                .help("Move this conversation to another account")
+                .disabled(!model.canHandOff(session) || model.accounts.count < 2)
                 UsageView(windows: session.usage)
                 Label(session.info?.account?.email ?? session.accountName, systemImage: "person.crop.circle")
                     .labelStyle(.titleAndIcon)
@@ -552,21 +552,21 @@ struct ResumeBar: View {
                 Text("Your next message continues it in")
                     .foregroundStyle(.secondary)
                     .fixedSize()
-            }
-            Picker("Account", selection: Binding(
-                get: { model.account(named: session.configuration.configDirectory).id },
-                set: { id in
-                    if let account = model.accounts.first(where: { $0.id == id }) {
-                        session.setAccount(configDirectory: account.configDirectory, name: model.name(of: account))
+                Picker("Account", selection: Binding(
+                    get: { model.account(named: session.configuration.configDirectory).id },
+                    set: { id in
+                        if let account = model.accounts.first(where: { $0.id == id }) {
+                            model.handOff(session, to: account)
+                        }
+                    }
+                )) {
+                    ForEach(model.accounts) { account in
+                        Text(model.name(of: account)).tag(account.id)
                     }
                 }
-            )) {
-                ForEach(model.accounts) { account in
-                    Text(model.name(of: account)).tag(account.id)
-                }
+                .labelsHidden()
+                .fixedSize()
             }
-            .labelsHidden()
-            .fixedSize()
             Toggle("As a copy", isOn: Binding(get: { session.configuration.fork }, set: { session.setFork($0) }))
                 .fixedSize()
                 .help("Keeps the original untouched and continues in a new session. Use it when Claude Desktop or another account still has it open.")

@@ -6,11 +6,14 @@
 "5h" = "5 h";
 "Accept edits" = "Aceptar ediciones";
 "Account" = "Cuenta";
+"Add" = "Agregar";
 "Add account folder…" = "Agregar carpeta de cuenta…";
+"Add Account…" = "Agregar cuenta…";
 "All Sessions" = "Todas las sesiones";
 "Allow" = "Permitir";
 "Allow %@?" = "¿Permitir %@?";
 "Allow edits this session" = "Permitir ediciones en esta sesión";
+"Another account has a session that needs you" = "Otra cuenta tiene una sesión que te necesita";
 "As a copy" = "Como copia";
 "Ask before acting" = "Preguntar antes de actuar";
 "Ask Claude to do something…" = "Pedile algo a Claude…";
@@ -24,6 +27,7 @@
 "Changes and Pull Request" = "Cambios y pull request";
 "Checked %@" = "Revisado %@";
 "Checks" = "Checks";
+"Choose a Claude Code config folder (the CLAUDE_CONFIG_DIR of a signed-in account)." = "Elegí una carpeta de configuración de Claude Code (el CLAUDE_CONFIG_DIR de una cuenta con sesión iniciada).";
 "Choose…" = "Elegir…";
 "CI failed on PR #%lld: %@" = "Falló el CI en el PR #%lld: %@";
 "Claude Code couldn't start: %@" = "Claude Code no pudo iniciar: %@";
@@ -35,9 +39,7 @@
 "Close Session" = "Cerrar la sesión";
 "Closed pull request" = "Pull request cerrado";
 "Conflicts" = "Conflictos";
-"Continue in" = "Continuar en";
 "Continue in Another Account" = "Continuar en otra cuenta";
-"Continue this conversation in another account" = "Seguir esta conversación en otra cuenta";
 "Cost of this session at API prices" = "Costo de esta sesión a precios de la API";
 "Couldn't change the effort: %@" = "No pude cambiar el esfuerzo: %@";
 "Couldn't change the model: %@" = "No pude cambiar el modelo: %@";
@@ -58,11 +60,13 @@
 "Max effort" = "Esfuerzo máximo";
 "Medium effort" = "Esfuerzo medio";
 "Merged pull request" = "Pull request mergeado";
+"Move this conversation to another account" = "Pasar esta conversación a otra cuenta";
 "New review feedback on PR #%lld from %@" = "Nuevo feedback de review en el PR #%lld de %@";
 "New Session" = "Nueva sesión";
 "No changes" = "Sin cambios";
 "No changes to show" = "No hay cambios para mostrar";
 "No content changes" = "Sin cambios de contenido";
+"No conversations in this account yet." = "Todavía no hay conversaciones en esta cuenta.";
 "No session" = "Ninguna sesión";
 "None" = "Ninguna";
 "None reported." = "Ninguno reportado.";
@@ -98,6 +102,7 @@
 "Starting Claude Code" = "Iniciando Claude Code";
 "Still open in Claude Desktop" = "Todavía abierta en Claude Desktop";
 "Stop" = "Detener";
+"Switch account" = "Cambiar de cuenta";
 "The turn ended with an error." = "El turno terminó con un error.";
 "The working tree is clean." = "No hay cambios sin commitear.";
 "Thinking" = "Pensando";

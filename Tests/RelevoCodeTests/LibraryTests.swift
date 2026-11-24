@@ -113,16 +113,65 @@ let transcriptLines = [
         try "{}".write(to: folder.appending(path: "other.json"), atomically: true, encoding: .utf8)
 
         let sessions = SessionLibrary.desktopSessions(in: root)
-        #expect(sessions["abc"] == DesktopSession(title: "Dependabot alerts", isArchived: false))
+        #expect(sessions["abc"] == DesktopSession(title: "Dependabot alerts", isArchived: false, accountUUID: "account"))
         #expect(sessions["def"]?.isArchived == true)
         #expect(sessions["ghi"] == DesktopSession(
             title: "Invoices", isArchived: false,
             pullRequests: ["https://github.com/a/b/pull/4": .merged, "https://github.com/a/b/pull/5": .open],
             question: "Which priority?",
-            lastTurnEnded: Date(timeIntervalSince1970: 2_000), lastFocused: Date(timeIntervalSince1970: 1_000)
+            lastTurnEnded: Date(timeIntervalSince1970: 2_000), lastFocused: Date(timeIntervalSince1970: 1_000),
+            accountUUID: "account"
         ))
         #expect(sessions["jkl"]?.question == nil)
         #expect(sessions.count == 4)
+    }
+
+    func account(uuid: String?, ran sessions: [String: Date]) throws -> ClaudeAccount {
+        let folder = try temporaryFolder()
+        if let uuid {
+            try #"{"oauthAccount":{"accountUuid":"\#(uuid)","emailAddress":"ana@example.com"}}"#
+                .write(to: folder.appending(path: ".claude.json"), atomically: true, encoding: .utf8)
+        }
+        for (id, date) in sessions {
+            let environment = folder.appending(path: "session-env/\(id)")
+            try FileManager.default.createDirectory(at: environment, withIntermediateDirectories: true)
+            try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: environment.path)
+        }
+        return ClaudeAccount(configDirectory: folder)
+    }
+
+    @Test func readsAnAccountsIdentityAndTheSessionsItRan() throws {
+        let account = try account(uuid: "uuid-a", ran: ["s1": Date(timeIntervalSince1970: 1_000)])
+
+        #expect(account.accountUUID() == "uuid-a")
+        #expect(account.sessionRuns() == ["s1": Date(timeIntervalSince1970: 1_000)])
+        #expect(try self.account(uuid: nil, ran: [:]).accountUUID() == nil)
+    }
+
+    @Test func givesEachSessionToTheAccountThatOwnsIt() throws {
+        let main = try account(uuid: "uuid-main", ran: ["ran-in-both": Date(timeIntervalSince1970: 1_000), "ran-in-main": .now])
+        let second = try account(uuid: "uuid-second", ran: ["ran-in-both": Date(timeIntervalSince1970: 2_000), "moved": .now])
+        let desktop = [
+            "desktop-second": DesktopSession(title: nil, isArchived: false, accountUUID: "uuid-second"),
+            "desktop-unknown": DesktopSession(title: nil, isArchived: false, accountUUID: "uuid-elsewhere"),
+        ]
+
+        let owners = SessionOwners.resolve(
+            ["ran-in-both", "ran-in-main", "moved", "desktop-second", "desktop-unknown", "unknown", "assigned-to-gone"],
+            accounts: [main, second],
+            assigned: ["moved": main.id, "assigned-to-gone": "/nowhere"],
+            desktop: desktop
+        )
+
+        #expect(owners == [
+            "ran-in-both": second.id,
+            "ran-in-main": main.id,
+            "moved": main.id,
+            "desktop-second": second.id,
+            "desktop-unknown": main.id,
+            "unknown": main.id,
+            "assigned-to-gone": main.id,
+        ])
     }
 
     @Test func noticesAQuestionStillWaitingForAnAnswer() throws {
@@ -227,15 +276,18 @@ let transcriptLines = [
         #expect(session.accountName == "ana@personal")
     }
 
-    @Test func continuesALiveSessionInAnotherAccountAsACopy() throws {
+    @Test func continuesALiveSessionInAnotherAccount() throws {
         let live = Session(configuration: SessionConfiguration(directory: URL(filePath: "/work/app"), permissionMode: "acceptEdits"), accountName: "work")
-        #expect(live.continuation(configDirectory: nil, accountName: "x") == nil)
+        #expect(live.continuation(configDirectory: nil, accountName: "x", fork: false) == nil)
 
         live.apply(.sessionStarted(sessionID: "live-1", model: nil, permissionMode: nil, directory: "/work/app/.claude/worktrees/w1"))
         live.append(.user("Ship it"))
         live.apply(.assistant(messageID: "m", blocks: [.toolUse(id: "t", name: "Bash", input: .object([:]))]))
-        let copy = try #require(live.continuation(configDirectory: URL(filePath: "/Users/ana/.claude-personal"), accountName: "personal"))
+        let copy = try #require(live.continuation(configDirectory: URL(filePath: "/Users/ana/.claude-personal"), accountName: "personal", fork: true))
+        let moved = try #require(live.continuation(configDirectory: URL(filePath: "/Users/ana/.claude-personal"), accountName: "personal", fork: false))
 
+        #expect(!moved.configuration.fork)
+        #expect(moved.configuration.arguments.suffix(2) == ["--resume", "live-1"])
         #expect(copy.status == .dormant)
         #expect(copy.accountName == "personal")
         #expect(copy.configuration.resume == "live-1")

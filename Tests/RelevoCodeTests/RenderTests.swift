@@ -207,7 +207,17 @@ struct ResizeRenderTests {
         )))
         let finished = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/relevo")), accountName: "ana@example.com", title: "Vistas multipaís")
         finished.apply(.result(TurnResult(isError: false, text: "done", costUSD: nil, durationMS: nil)))
-        model.sessions = [session, working, waiting, finished]
+        let work = ClaudeAccount(configDirectory: URL(filePath: "/Users/ana/.claude-accounts/work"))
+        model.accounts = [.standard, work]
+        model.accountInfo = [
+            ClaudeAccount.standard.id: AccountInfo(email: "ana@example.com", organization: "Ana's Individual Org", subscription: "max"),
+            work.id: AccountInfo(email: "ana.lopez@work.example", organization: "Ergodic", subscription: "team"),
+        ]
+        let elsewhere = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex"), configDirectory: work.configDirectory), accountName: "ana.lopez@work.example", title: "Deploy HA")
+        elsewhere.apply(.permissionRequest(PermissionRequest(
+            id: "p2", toolName: "Bash", displayName: "Bash", input: .object([:]), description: nil, suggestions: [], toolUseID: nil
+        )))
+        model.sessions = [session, working, waiting, finished, elsewhere]
         model.selection = .open(session.id)
         model.recent = (1...9).map { index in
             PastSession(
@@ -244,6 +254,22 @@ struct ResizeRenderTests {
                 .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-sidebar-\(name).png"))
             window.close()
         }
+    }
+
+    @Test func rendersTheAccountList() async throws {
+        _ = NSApplication.shared
+        let hosting = NSHostingView(rootView: AccountList(model: narrowModel()) {})
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.setContentSize(hosting.fittingSize)
+        window.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(600))
+        let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        try #require(bitmap.representation(using: .png, properties: [:]))
+            .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-accounts.png"))
+        window.close()
     }
 
     @Test func rendersTheSessionFinder() async throws {
