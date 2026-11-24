@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "Relevo", targets: ["Relevo"]),
+        .executable(name: "RelevoCode", targets: ["RelevoCodeApp"]),
     ],
     targets: [
         .target(
@@ -32,6 +33,20 @@ let package = Package(
         .testTarget(
             name: "RelevoUITests",
             dependencies: ["RelevoCore", "RelevoUI"]
+        ),
+        .target(name: "RelevoCI"),
+        .testTarget(
+            name: "RelevoCITests",
+            dependencies: ["RelevoCI"]
+        ),
+        .target(name: "RelevoCode"),
+        .executableTarget(
+            name: "RelevoCodeApp",
+            dependencies: ["RelevoCode", "RelevoCI"]
+        ),
+        .testTarget(
+            name: "RelevoCodeTests",
+            dependencies: ["RelevoCode", "RelevoCodeApp", "RelevoCI"]
         ),
     ]
 )
