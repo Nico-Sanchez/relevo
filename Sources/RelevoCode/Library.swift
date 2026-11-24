@@ -7,6 +7,7 @@ public struct PastSession: Sendable, Equatable, Identifiable {
     public let title: String
     public let lastActivity: Date
     public let branch: String?
+    public var awaitsAnswer = false
 
     public var projectName: String {
         guard let worktree = worktreeName else { return directory.lastPathComponent }
@@ -31,11 +32,66 @@ public struct PastSession: Sendable, Equatable, Identifiable {
         guard let marker = parts.lastIndex(of: "worktrees"), marker >= 1, parts[marker - 1] == ".claude", marker + 1 < parts.count else { return nil }
         return marker
     }
+
+    public func attention(desktop: DesktopSession?, seen: Date?) -> Attention? {
+        if awaitsAnswer || desktop?.question != nil {
+            return .waiting
+        }
+        guard let ended = desktop?.lastTurnEnded else { return nil }
+        return ended > max(desktop?.lastFocused ?? .distantPast, seen ?? .distantPast) ? .unread : nil
+    }
+}
+
+public enum Attention: Sendable, Equatable {
+    case waiting, unread
+}
+
+public enum PullRequestState: String, Sendable, Comparable {
+    case open = "OPEN", merged = "MERGED", closed = "CLOSED"
+
+    private var rank: Int {
+        switch self {
+        case .closed: 0
+        case .merged: 1
+        case .open: 2
+        }
+    }
+
+    public static func < (lhs: Self, rhs: Self) -> Bool {
+        lhs.rank < rhs.rank
+    }
+}
+
+public struct PullRequestBadge: Sendable, Equatable {
+    public let state: PullRequestState
+    public let count: Int
+
+    public init?(_ states: some Collection<PullRequestState>) {
+        guard let state = states.max() else { return nil }
+        self.state = state
+        count = states.count
+    }
 }
 
 public struct DesktopSession: Sendable, Equatable {
     public let title: String?
     public let isArchived: Bool
+    public let pullRequests: [String: PullRequestState]
+    public let question: String?
+    public let lastTurnEnded: Date?
+    public let lastFocused: Date?
+
+    public init(
+        title: String?, isArchived: Bool, pullRequests: [String: PullRequestState] = [:],
+        question: String? = nil, lastTurnEnded: Date? = nil, lastFocused: Date? = nil
+    ) {
+        self.title = title
+        self.isArchived = isArchived
+        self.pullRequests = pullRequests
+        self.question = question
+        self.lastTurnEnded = lastTurnEnded
+        self.lastFocused = lastFocused
+    }
 }
 
 public enum SessionLibrary {
@@ -87,6 +143,7 @@ public enum SessionLibrary {
         var branch: String?
         var firstPrompt: String?
         var title: String?
+        var lastMessage: JSONValue?
         for entry in lines(head) + lines(tail) {
             if entry["isSidechain"]?.bool == true { continue }
             switch entry["type"]?.string {
@@ -100,8 +157,10 @@ public enum SessionLibrary {
                 if firstPrompt == nil, entry["isMeta"]?.bool != true {
                     firstPrompt = History.userText(entry["message"]?["content"])
                 }
+                lastMessage = entry
             case "assistant":
                 directory = directory ?? entry["cwd"]?.string
+                lastMessage = entry
             default:
                 break
             }
@@ -113,8 +172,16 @@ public enum SessionLibrary {
             directory: URL(filePath: directory),
             title: String(label.split(whereSeparator: \.isNewline).first ?? "").trimmingCharacters(in: .whitespaces),
             lastActivity: lastActivity,
-            branch: branch
+            branch: branch,
+            awaitsAnswer: lastMessage.map(asksTheUser) ?? false
         )
+    }
+
+    private static func asksTheUser(_ entry: JSONValue) -> Bool {
+        guard entry["type"]?.string == "assistant" else { return false }
+        return (entry["message"]?["content"]?.array ?? []).contains {
+            $0["type"]?.string == "tool_use" && $0["name"]?.string == "AskUserQuestion"
+        }
     }
 
     public static func relevant(
@@ -140,9 +207,25 @@ public enum SessionLibrary {
                   let object = try? JSONSerialization.jsonObject(with: data) else { continue }
             let session = JSONValue(object)
             guard let id = session["cliSessionId"]?.string else { continue }
-            sessions[id] = DesktopSession(title: session["title"]?.string, isArchived: session["isArchived"]?.bool ?? false)
+            let pullRequests = (session["prs"]?.array ?? []).compactMap { pullRequest -> (String, PullRequestState)? in
+                guard let url = pullRequest["url"]?.string,
+                      let state = pullRequest["state"]?.string.flatMap(PullRequestState.init) else { return nil }
+                return (url, state)
+            }
+            sessions[id] = DesktopSession(
+                title: session["title"]?.string,
+                isArchived: session["isArchived"]?.bool ?? false,
+                pullRequests: Dictionary(pullRequests, uniquingKeysWith: { $1 }),
+                question: session["turnWrapUp"]?["needsUser"]?.string.flatMap { $0.isEmpty ? nil : $0 },
+                lastTurnEnded: date(session["lastTurnEdgeAt"]),
+                lastFocused: date(session["lastFocusedAt"])
+            )
         }
         return sessions
+    }
+
+    private static func date(_ milliseconds: JSONValue?) -> Date? {
+        milliseconds?.number.map { Date(timeIntervalSince1970: $0 / 1000) }
     }
 
     static func lines(_ data: Data) -> [JSONValue] {

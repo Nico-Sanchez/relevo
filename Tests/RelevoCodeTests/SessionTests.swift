@@ -91,6 +91,16 @@ import Testing
         #expect(tool(session)?.state == .denied)
     }
 
+    @Test func remembersWhenTheLastTurnEnded() {
+        let session = makeSession()
+        session.apply(.status("requesting"))
+        #expect(session.lastTurnEnded == nil)
+
+        let before = Date.now
+        session.apply(.result(TurnResult(isError: false, text: "done", costUSD: nil, durationMS: nil)))
+        #expect(session.lastTurnEnded.map { $0 >= before } == true)
+    }
+
     @Test func reportsFailedTurnsAndCrashes() {
         let session = makeSession()
 

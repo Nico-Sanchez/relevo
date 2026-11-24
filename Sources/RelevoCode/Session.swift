@@ -78,6 +78,7 @@ public final class Session: Identifiable {
     public private(set) var customTitle: String?
     public private(set) var selectedModel: String?
     public private(set) var effort: String?
+    public private(set) var lastTurnEnded: Date?
 
     private let environment: [String: String]
     private let executable: URL?
@@ -369,6 +370,7 @@ public final class Session: Identifiable {
             usage = windows
         case .result(let result):
             status = .idle
+            lastTurnEnded = .now
             activity = nil
             isThinking = false
             cost = result.costUSD ?? cost
@@ -379,6 +381,7 @@ public final class Session: Identifiable {
             pendingPermissions = []
             activity = nil
             isThinking = false
+            lastTurnEnded = .now
             status = .ended(code == 0 ? nil : .exited(status: code, message: message))
         case .ignored:
             break

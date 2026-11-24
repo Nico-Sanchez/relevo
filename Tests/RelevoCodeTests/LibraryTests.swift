@@ -101,12 +101,69 @@ let transcriptLines = [
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try #"{"cliSessionId":"abc","title":"Dependabot alerts","isArchived":false}"#.write(to: folder.appending(path: "local_1.json"), atomically: true, encoding: .utf8)
         try #"{"cliSessionId":"def","isArchived":true}"#.write(to: folder.appending(path: "local_2.json"), atomically: true, encoding: .utf8)
+        try """
+            {"cliSessionId":"ghi","title":"Invoices","isArchived":false,
+             "prs":[{"prNumber":4,"url":"https://github.com/a/b/pull/4","state":"MERGED"},
+                    {"prNumber":5,"url":"https://github.com/a/b/pull/5","state":"OPEN"},
+                    {"prNumber":6,"url":"https://github.com/a/b/pull/6","state":"QUEUED"}],
+             "turnWrapUp":{"description":"Done.","needsUser":"Which priority?"},
+             "lastTurnEdgeAt":2000000,"lastFocusedAt":1000000}
+            """.write(to: folder.appending(path: "local_3.json"), atomically: true, encoding: .utf8)
+        try #"{"cliSessionId":"jkl","isArchived":false,"turnWrapUp":{"description":"Done.","needsUser":""}}"#.write(to: folder.appending(path: "local_4.json"), atomically: true, encoding: .utf8)
         try "{}".write(to: folder.appending(path: "other.json"), atomically: true, encoding: .utf8)
 
         let sessions = SessionLibrary.desktopSessions(in: root)
         #expect(sessions["abc"] == DesktopSession(title: "Dependabot alerts", isArchived: false))
         #expect(sessions["def"]?.isArchived == true)
-        #expect(sessions.count == 2)
+        #expect(sessions["ghi"] == DesktopSession(
+            title: "Invoices", isArchived: false,
+            pullRequests: ["https://github.com/a/b/pull/4": .merged, "https://github.com/a/b/pull/5": .open],
+            question: "Which priority?",
+            lastTurnEnded: Date(timeIntervalSince1970: 2_000), lastFocused: Date(timeIntervalSince1970: 1_000)
+        ))
+        #expect(sessions["jkl"]?.question == nil)
+        #expect(sessions.count == 4)
+    }
+
+    @Test func noticesAQuestionStillWaitingForAnAnswer() throws {
+        let question = #"{"type":"assistant","cwd":"/work/app","message":{"id":"msg_9","role":"assistant","content":[{"type":"tool_use","id":"toolu_9","name":"AskUserQuestion","input":{}}]}}"#
+        let answer = #"{"type":"user","cwd":"/work/app","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_9","content":"Option A"}]}}"#
+        let title = #"{"type":"custom-title","customTitle":"Login bug"}"#
+
+        let waiting = try writeTranscript(Array(transcriptLines.prefix(4)) + [question, title], named: "waiting")
+        let answered = try writeTranscript(Array(transcriptLines.prefix(4)) + [question, answer], named: "answered")
+
+        #expect(SessionLibrary.summary(of: waiting, lastActivity: .distantPast)?.awaitsAnswer == true)
+        #expect(SessionLibrary.summary(of: answered, lastActivity: .distantPast)?.awaitsAnswer == false)
+        #expect(SessionLibrary.summary(of: try writeTranscript(transcriptLines), lastActivity: .distantPast)?.awaitsAnswer == false)
+    }
+
+    @Test func showsTheMostActivePullRequestStateWithTheCount() {
+        let mixed = PullRequestBadge([.merged, .open, .closed])
+
+        #expect(PullRequestBadge([PullRequestState]()) == nil)
+        #expect(PullRequestBadge([.merged])?.count == 1)
+        #expect(mixed?.state == .open)
+        #expect(mixed?.count == 3)
+        #expect(PullRequestBadge([.closed, .merged])?.state == .merged)
+    }
+
+    @Test func flagsSessionsWaitingOnYouOrFinishedSinceYouLooked() {
+        let past = PastSession(id: "a", file: URL(filePath: "/x"), directory: URL(filePath: "/work/app"), title: "", lastActivity: .now, branch: nil)
+        var waiting = past
+        waiting.awaitsAnswer = true
+        let ended = Date(timeIntervalSince1970: 2_000)
+        func desktop(question: String? = nil, focused: Date?) -> DesktopSession {
+            DesktopSession(title: nil, isArchived: false, question: question, lastTurnEnded: ended, lastFocused: focused)
+        }
+
+        #expect(past.attention(desktop: nil, seen: nil) == nil)
+        #expect(waiting.attention(desktop: nil, seen: .now) == .waiting)
+        #expect(past.attention(desktop: desktop(question: "Which?", focused: .now), seen: .now) == .waiting)
+        #expect(past.attention(desktop: desktop(focused: Date(timeIntervalSince1970: 1_000)), seen: nil) == .unread)
+        #expect(past.attention(desktop: desktop(focused: nil), seen: nil) == .unread)
+        #expect(past.attention(desktop: desktop(focused: Date(timeIntervalSince1970: 3_000)), seen: nil) == nil)
+        #expect(past.attention(desktop: desktop(focused: nil), seen: Date(timeIntervalSince1970: 3_000)) == nil)
     }
 
     @Test func rebuildsTheConversationFromATranscript() throws {

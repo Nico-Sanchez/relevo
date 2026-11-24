@@ -41,6 +41,8 @@ final class AppModel {
     var problem: String?
     var showingNewSession = false
     var monitors: [Session.ID: PullRequestMonitor] = [:]
+    var seen: [String: Date]
+    private(set) var seenOpen: [Session.ID: Date] = [:]
 
     private let defaults = UserDefaults.standard
 
@@ -48,6 +50,8 @@ final class AppModel {
         accounts = [.standard] + (defaults.stringArray(forKey: "accountFolders") ?? []).map {
             ClaudeAccount(configDirectory: URL(filePath: $0))
         }
+        seen = ((defaults.dictionary(forKey: "seenSessions") as? [String: Double]) ?? [:])
+            .mapValues(Date.init(timeIntervalSince1970:))
     }
 
     var selected: Session? {
@@ -91,6 +95,17 @@ final class AppModel {
         await refreshRecent()
         if sessions.isEmpty, recent.isEmpty {
             showingNewSession = true
+        }
+        keepRecentFresh()
+    }
+
+    private func keepRecentFresh() {
+        Task { [weak self] in
+            while true {
+                try? await Task.sleep(for: .seconds(20))
+                guard let self else { return }
+                await self.refreshRecent()
+            }
         }
     }
 
@@ -172,6 +187,40 @@ final class AppModel {
         return !session.isArchived
     }
 
+    func markSeen(_ item: SidebarItem?) {
+        guard case .open(let id) = item, let session = sessions.first(where: { $0.id == id }) else { return }
+        seenOpen[id] = .now
+        guard let sessionID = session.sessionID else { return }
+        let cutoff = Date.now.addingTimeInterval(-60 * 86_400)
+        seen[sessionID] = .now
+        seen = seen.filter { $0.value > cutoff }
+        defaults.set(seen.mapValues(\.timeIntervalSince1970), forKey: "seenSessions")
+    }
+
+    func attention(of session: Session) -> Attention? {
+        if session.status == .waitingForPermission {
+            return .waiting
+        }
+        guard selection != .open(session.id), let ended = session.lastTurnEnded else { return nil }
+        return ended > (seenOpen[session.id] ?? .distantPast) ? .unread : nil
+    }
+
+    func attention(of past: PastSession) -> Attention? {
+        past.attention(desktop: desktop[past.id], seen: seen[past.id])
+    }
+
+    func pullRequests(of session: Session) -> PullRequestBadge? {
+        var states = session.sessionID.flatMap { desktop[$0]?.pullRequests } ?? [:]
+        if let pullRequest = monitors[session.id]?.pullRequest, let state = PullRequestState(rawValue: pullRequest.state) {
+            states[pullRequest.url] = state
+        }
+        return PullRequestBadge(states.values)
+    }
+
+    func pullRequests(of past: PastSession) -> PullRequestBadge? {
+        desktop[past.id].flatMap { PullRequestBadge($0.pullRequests.values) }
+    }
+
     func close(_ session: Session) {
         session.stop()
         monitors.removeValue(forKey: session.id)?.stop()
@@ -217,10 +266,15 @@ struct ContentView: View {
         .sheet(isPresented: $model.showingNewSession) {
             NewSessionView(model: model)
         }
-        .onChange(of: model.selection) {
-            if case .recent(let id) = model.selection, let past = model.recent.first(where: { $0.id == id }) {
+        .onChange(of: model.selection) { previous, current in
+            model.markSeen(previous)
+            model.markSeen(current)
+            if case .recent(let id) = current, let past = model.recent.first(where: { $0.id == id }) {
                 model.open(past)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await model.refreshRecent() }
         }
     }
 }
@@ -237,27 +291,27 @@ struct SidebarView: View {
             if !model.sessions.isEmpty {
                 Section("Open") {
                     ForEach(model.sessions) { session in
-                        SessionRow(session: session)
-                            .tag(SidebarItem.open(session.id))
-                            .contextMenu {
-                                ContinueMenu(model: model, session: session)
-                                Divider()
-                                Button("Close Session") { model.close(session) }
-                            }
+                        SidebarRow(
+                            pullRequests: model.pullRequests(of: session),
+                            attention: model.attention(of: session),
+                            working: session.status == .working || session.status == .starting
+                        ) {
+                            SessionRow(session: session)
+                        } actions: {
+                            OpenSessionMenu(model: model, session: session)
+                        }
+                        .tag(SidebarItem.open(session.id))
                     }
                 }
             }
             Section("Recent", isExpanded: $recentExpanded) {
                 ForEach(model.recentNotOpen.prefix(Self.recentLimit)) { past in
-                    RecentRow(past: past)
-                        .tag(SidebarItem.recent(past.id))
-                        .contextMenu {
-                            Menu("Continue in") {
-                                ForEach(model.accounts) { account in
-                                    Button(model.name(of: account)) { model.open(past, in: account) }
-                                }
-                            }
-                        }
+                    SidebarRow(pullRequests: model.pullRequests(of: past), attention: model.attention(of: past)) {
+                        RecentRow(past: past)
+                    } actions: {
+                        RecentSessionMenu(model: model, past: past)
+                    }
+                    .tag(SidebarItem.recent(past.id))
                 }
                 if model.recentNotOpen.count > Self.recentLimit {
                     Button {
@@ -265,7 +319,6 @@ struct SidebarView: View {
                     } label: {
                         Text("See all \(model.recentNotOpen.count)…")
                             .foregroundStyle(.secondary)
-                            .padding(.leading, 22)
                     }
                     .buttonStyle(.plain)
                 }
@@ -307,29 +360,189 @@ struct ContinueMenu: View {
     }
 }
 
+struct OpenSessionMenu: View {
+    let model: AppModel
+    let session: Session
+
+    var body: some View {
+        ContinueMenu(model: model, session: session)
+        Divider()
+        Button("Close Session") { model.close(session) }
+    }
+}
+
+struct RecentSessionMenu: View {
+    let model: AppModel
+    let past: PastSession
+
+    var body: some View {
+        Menu("Continue in") {
+            ForEach(model.accounts) { account in
+                Button(model.name(of: account)) { model.open(past, in: account) }
+            }
+        }
+    }
+}
+
+struct SidebarRow<Content: View, Actions: View>: View {
+    let pullRequests: PullRequestBadge?
+    let attention: Attention?
+    let working: Bool
+    let content: Content
+    let actions: Actions
+    @State private var hovering = false
+
+    init(
+        pullRequests: PullRequestBadge?, attention: Attention?, working: Bool = false,
+        @ViewBuilder content: () -> Content, @ViewBuilder actions: () -> Actions
+    ) {
+        self.pullRequests = pullRequests
+        self.attention = attention
+        self.working = working
+        self.content = content()
+        self.actions = actions()
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let pullRequests {
+                PullRequestIcon(badge: pullRequests)
+            }
+            Group {
+                if hovering {
+                    Menu {
+                        actions
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                } else {
+                    StatusDot(attention: attention, working: working)
+                }
+            }
+            .frame(width: 18)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .contextMenu { actions }
+    }
+}
+
+struct StatusDot: View {
+    static let waiting = Color(red: 0.96, green: 0.74, blue: 0.24)
+    static let unread = Color(red: 0.26, green: 0.52, blue: 0.87)
+
+    let attention: Attention?
+    var working = false
+
+    var body: some View {
+        if attention == .waiting {
+            Circle().fill(Self.waiting).frame(width: 8, height: 8)
+                .help("Waiting for you")
+        } else if working {
+            ProgressView()
+                .controlSize(.mini)
+        } else if attention == .unread {
+            Circle().fill(Self.unread).frame(width: 8, height: 8)
+                .help("Unread")
+        }
+    }
+}
+
+struct GitGlyph: Shape {
+    let merged: Bool
+
+    func path(in rect: CGRect) -> Path {
+        let unit = min(rect.width, rect.height) / 16
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: rect.midX + (x - 8) * unit, y: rect.midY + (y - 8) * unit)
+        }
+        var path = Path()
+        func ring(_ x: CGFloat, _ y: CGFloat) {
+            let center = point(x, y)
+            path.addEllipse(in: CGRect(x: center.x - 1.8 * unit, y: center.y - 1.8 * unit, width: 3.6 * unit, height: 3.6 * unit))
+        }
+        ring(4, 3.5)
+        path.move(to: point(4, 5.3))
+        if merged {
+            path.addLine(to: point(4, 14.5))
+            ring(12, 10)
+            path.move(to: point(4, 6.5))
+            path.addQuadCurve(to: point(10.2, 10), control: point(4.5, 10))
+        } else {
+            path.addLine(to: point(4, 10.7))
+            ring(4, 12.5)
+            ring(12, 12.5)
+            path.move(to: point(12, 10.7))
+            path.addLine(to: point(12, 5.5))
+            path.addQuadCurve(to: point(10, 3.5), control: point(12, 3.5))
+            path.addLine(to: point(8.5, 3.5))
+            path.move(to: point(10, 1.8))
+            path.addLine(to: point(8.3, 3.5))
+            path.addLine(to: point(10, 5.2))
+        }
+        return path
+    }
+}
+
+struct PullRequestIcon: View {
+    let badge: PullRequestBadge
+
+    var body: some View {
+        HStack(spacing: 3) {
+            GitGlyph(merged: badge.state == .merged)
+                .stroke(color, style: StrokeStyle(lineWidth: 1.3, lineCap: .round, lineJoin: .round))
+                .frame(width: 13, height: 13)
+            if badge.count > 1 {
+                Text(badge.count, format: .number)
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .help(help)
+    }
+
+    private var color: Color {
+        switch badge.state {
+        case .open: Color(red: 0.29, green: 0.61, blue: 0.30)
+        case .merged: Color(red: 0.57, green: 0.48, blue: 0.85)
+        case .closed: Color(red: 0.82, green: 0.29, blue: 0.27)
+        }
+    }
+
+    private var help: String {
+        guard badge.count == 1 else { return String(localized: "\(badge.count) pull requests") }
+        return switch badge.state {
+        case .open: String(localized: "Open pull request")
+        case .merged: String(localized: "Merged pull request")
+        case .closed: String(localized: "Closed pull request")
+        }
+    }
+}
+
 struct SessionRow: View {
     let session: Session
 
     var body: some View {
-        HStack(spacing: 8) {
-            StatusIndicator(status: session.status)
-                .frame(width: 14)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(session.title)
-                    .lineLimit(1)
-                Text(verbatim: "\(session.workingDirectory.lastPathComponent) · \(session.accountName)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+        VStack(alignment: .leading, spacing: 2) {
+            Text(session.title)
+                .lineLimit(1)
+            Text(verbatim: "\(session.workingDirectory.lastPathComponent) · \(session.accountName)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
-        .padding(.vertical, 2)
     }
 }
 
 struct RecentRow: View {
     let past: PastSession
-    var indent: CGFloat = 22
     var showsRepository = true
 
     private var place: String? {
@@ -353,8 +566,6 @@ struct RecentRow: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 2)
-        .padding(.leading, indent)
         .help(Text(verbatim: "\(past.title)\n\(past.directory.path)"))
     }
 }
@@ -386,8 +597,17 @@ struct AllSessionsView: View {
                                 model.open(past)
                                 dismiss()
                             } label: {
-                                RecentRow(past: past, indent: 0, showsRepository: false)
-                                    .contentShape(Rectangle())
+                                HStack(spacing: 6) {
+                                    RecentRow(past: past, showsRepository: false)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    if let pullRequests = model.pullRequests(of: past) {
+                                        PullRequestIcon(badge: pullRequests)
+                                    }
+                                    StatusDot(attention: model.attention(of: past))
+                                        .frame(width: 18)
+                                }
+                                .padding(.vertical, 2)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                         }
@@ -410,28 +630,6 @@ struct AllSessionsView: View {
             }
         }
         .frame(minWidth: 520, idealWidth: 600, minHeight: 480, idealHeight: 640)
-    }
-}
-
-struct StatusIndicator: View {
-    let status: Session.Status
-
-    var body: some View {
-        switch status {
-        case .starting, .working:
-            ProgressView()
-                .controlSize(.mini)
-        case .waitingForPermission:
-            Circle().fill(.orange).frame(width: 8, height: 8)
-                .help("Waiting for your permission")
-        case .idle:
-            Circle().fill(.green).frame(width: 8, height: 8)
-        case .dormant:
-            Circle().strokeBorder(.secondary, lineWidth: 1.5).frame(width: 8, height: 8)
-                .help("Not running: your next message continues it")
-        case .ended:
-            Circle().fill(.secondary).frame(width: 8, height: 8)
-        }
     }
 }
 

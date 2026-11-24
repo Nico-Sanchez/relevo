@@ -199,7 +199,15 @@ struct ResizeRenderTests {
             configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")),
             accountName: "nicolas.sanchez@lambdaclass.example", title: "vertex", dormant: true
         )
-        model.sessions = [session]
+        let working = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")), accountName: "ana@example.com", title: "Facturación en México")
+        working.apply(.status("requesting"))
+        let waiting = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")), accountName: "ana@example.com", title: "Gestionero on-demand")
+        waiting.apply(.permissionRequest(PermissionRequest(
+            id: "p1", toolName: "Bash", displayName: "Bash", input: .object([:]), description: nil, suggestions: [], toolUseID: nil
+        )))
+        let finished = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/relevo")), accountName: "ana@example.com", title: "Vistas multipaís")
+        finished.apply(.result(TurnResult(isError: false, text: "done", costUSD: nil, durationMS: nil)))
+        model.sessions = [session, working, waiting, finished]
         model.selection = .open(session.id)
         model.recent = (1...9).map { index in
             PastSession(
@@ -207,8 +215,35 @@ struct ResizeRenderTests {
                 title: "Principales en backoffice y facturación de pedidos número \(index)", lastActivity: .now.addingTimeInterval(Double(-600 * index)), branch: nil
             )
         }
-        model.desktop = Dictionary(uniqueKeysWithValues: (1...9).map { ("r\($0)", DesktopSession(title: nil, isArchived: false)) })
+        let pullRequests: [Int: [PullRequestState]] = [1: [.open, .merged, .merged], 3: [.merged], 4: [.merged, .merged], 5: [.open], 6: [.closed]]
+        model.desktop = Dictionary(uniqueKeysWithValues: (1...9).map { index in
+            let states = pullRequests[index] ?? []
+            return ("r\(index)", DesktopSession(
+                title: nil, isArchived: false,
+                pullRequests: Dictionary(uniqueKeysWithValues: states.enumerated().map { ("https://github.com/a/b/pull/\(index * 10 + $0.offset)", $0.element) }),
+                question: index == 2 ? "Which priority?" : nil,
+                lastTurnEnded: [1, 4].contains(index) ? .now : nil
+            ))
+        })
         return model
+    }
+
+    @Test func rendersTheSidebarIndicators() async throws {
+        _ = NSApplication.shared
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            let hosting = NSHostingView(rootView: SidebarView(model: narrowModel()).frame(width: 300, height: 640))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 640), styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: appearance)
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            try await Task.sleep(for: .milliseconds(800))
+            let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+            hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+            try #require(bitmap.representation(using: .png, properties: [:]))
+                .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-sidebar-\(name).png"))
+            window.close()
+        }
     }
 
     @Test func rendersTheSessionFinder() async throws {

@@ -1,4 +1,5 @@
 "%lld files" = "%lld archivos";
+"%lld pull requests" = "%lld pull requests";
 "%lld waiting until the session is free" = "%lld esperando a que la sesión se libere";
 "%lld%% used" = "%lld%% usado";
 "%lld%% used, resets %@" = "%lld%% usado, se renueva %@";
@@ -32,6 +33,7 @@
 "Claude Code refused it." = "Claude Code lo rechazó.";
 "Close" = "Cerrar";
 "Close Session" = "Cerrar la sesión";
+"Closed pull request" = "Pull request cerrado";
 "Conflicts" = "Conflictos";
 "Continue in" = "Continuar en";
 "Continue in Another Account" = "Continuar en otra cuenta";
@@ -55,6 +57,7 @@
 "Low effort" = "Esfuerzo bajo";
 "Max effort" = "Esfuerzo máximo";
 "Medium effort" = "Esfuerzo medio";
+"Merged pull request" = "Pull request mergeado";
 "New review feedback on PR #%lld from %@" = "Nuevo feedback de review en el PR #%lld de %@";
 "New Session" = "Nueva sesión";
 "No changes" = "Sin cambios";
@@ -65,11 +68,11 @@
 "None reported." = "Ninguno reportado.";
 "None." = "Nada.";
 "not a collaborator" = "no es colaborador";
-"Not running: your next message continues it" = "No está corriendo: tu próximo mensaje la retoma";
 "Not watching" = "Sin seguimiento";
 "Open" = "Abiertas";
 "Open in Desktop" = "Abierta en Desktop";
 "Open in Terminal" = "Abrir en la terminal";
+"Open pull request" = "Pull request abierto";
 "Open this session's folder in Ghostty" = "Abrir la carpeta de esta sesión en Ghostty";
 "Pane" = "Panel";
 "Permissions" = "Permisos";
@@ -103,7 +106,8 @@
 "This session ended." = "Esta sesión terminó.";
 "This session's folder doesn't exist anymore." = "La carpeta de esta sesión ya no existe.";
 "Uncommitted" = "Sin commitear";
-"Waiting for your permission" = "Esperando tu permiso";
+"Unread" = "Sin leer";
+"Waiting for you" = "Te está esperando";
 "Week" = "Semana";
 "When CI fails, a collaborator leaves feedback or the branch conflicts, this session gets a message to fix it, commit and push." = "Cuando falla el CI, un colaborador deja feedback o el branch tiene conflictos, esta sesión recibe un mensaje para arreglarlo, commitear y pushear.";
 "Work in a new worktree" = "Trabajar en un worktree nuevo";
