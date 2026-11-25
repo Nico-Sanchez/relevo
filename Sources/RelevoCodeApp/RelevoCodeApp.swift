@@ -577,6 +577,7 @@ struct SidebarView: View {
                     Text("No conversations in this account yet.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else if recent.count > Self.recentLimit {
                     Button {
                         showingAllSessions = true

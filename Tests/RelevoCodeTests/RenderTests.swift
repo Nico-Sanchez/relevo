@@ -245,10 +245,13 @@ struct ResizeRenderTests {
 
     @Test func rendersTheSidebarIndicators() async throws {
         _ = NSApplication.shared
-        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+        for (name, appearance, width) in [("light", NSAppearance.Name.aqua, 300.0), ("dark", .darkAqua, 300), ("empty", .aqua, 210)] {
             let (model, scene) = narrow()
-            let hosting = NSHostingView(rootView: SidebarView(model: model, window: scene).frame(width: 300, height: 640))
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 640), styleMask: [.titled], backing: .buffered, defer: false)
+            if name == "empty", let other = model.accounts.last {
+                scene.switchAccount(to: other)
+            }
+            let hosting = NSHostingView(rootView: SidebarView(model: model, window: scene).frame(width: width, height: 640))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 640), styleMask: [.titled], backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
             window.appearance = NSAppearance(named: appearance)
             window.contentView = hosting

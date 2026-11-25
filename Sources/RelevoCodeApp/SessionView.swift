@@ -74,9 +74,6 @@ struct SessionView: View {
                 .help("Move this conversation to another account")
                 .disabled(!model.canHandOff(session))
                 UsageView(windows: session.usage)
-                Label(session.info?.account?.email ?? session.accountName, systemImage: "person.crop.circle")
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(.secondary)
                 Button {
                     TerminalLauncher.open(session.workingDirectory)
                 } label: {
