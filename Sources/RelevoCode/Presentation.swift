@@ -215,3 +215,102 @@ public enum Quote {
         }
     }
 }
+
+public enum TranscriptRow: Equatable, Sendable, Identifiable {
+    case item(TranscriptItem)
+    case tools(id: String, calls: [ToolCall])
+
+    public var id: String {
+        switch self {
+        case .item(let item): item.id
+        case .tools(let id, _): id
+        }
+    }
+
+    public static func rows(_ items: [TranscriptItem]) -> [TranscriptRow] {
+        var rows: [TranscriptRow] = []
+        var run: [TranscriptItem] = []
+        func flush() {
+            if run.count > 1 {
+                rows.append(.tools(id: run[0].id, calls: run.compactMap { item in
+                    if case .tool(let call) = item.kind { call } else { nil }
+                }))
+            } else {
+                rows += run.map(TranscriptRow.item)
+            }
+            run = []
+        }
+        for item in items {
+            if case .tool = item.kind {
+                run.append(item)
+            } else {
+                flush()
+                rows.append(.item(item))
+            }
+        }
+        flush()
+        return rows
+    }
+}
+
+public enum ToolActivity: Equatable, Sendable {
+    case commands(Int)
+    case reads(Int)
+    case edits(Int)
+    case searches
+    case web
+    case todos
+    case agents(Int)
+    case tools(Int)
+
+    private enum Kind: Hashable {
+        case commands, reads, edits, searches, web, todos, agents, tools
+    }
+
+    public static func summarize(_ calls: [ToolCall]) -> [ToolActivity] {
+        var order: [Kind] = []
+        var counts: [Kind: Int] = [:]
+        var files: [Kind: Set<String>] = [:]
+        for call in calls {
+            let kind: Kind = switch call.name {
+            case "Bash": .commands
+            case "Read": .reads
+            case "Edit", "MultiEdit", "Write", "NotebookEdit": .edits
+            case "Grep", "Glob", "LS": .searches
+            case "WebSearch", "WebFetch": .web
+            case "TodoWrite": .todos
+            case "Task", "Agent": .agents
+            default: .tools
+            }
+            if counts[kind] == nil {
+                order.append(kind)
+            }
+            counts[kind, default: 0] += 1
+            if let path = call.input["file_path"]?.string ?? call.input["notebook_path"]?.string {
+                files[kind, default: []].insert(path)
+            }
+        }
+        return order.map { kind in
+            let count = counts[kind] ?? 0
+            let distinct = files[kind]?.count ?? 0
+            switch kind {
+            case .commands: return .commands(count)
+            case .reads: return .reads(distinct > 0 ? distinct : count)
+            case .edits: return .edits(distinct > 0 ? distinct : count)
+            case .searches: return .searches
+            case .web: return .web
+            case .todos: return .todos
+            case .agents: return .agents(count)
+            case .tools: return .tools(count)
+            }
+        }
+    }
+
+    public static func state(of calls: [ToolCall]) -> ToolCall.State {
+        let states = calls.map(\.state)
+        for state in [ToolCall.State.awaitingPermission, .running, .failed, .denied, .stopped] where states.contains(state) {
+            return state
+        }
+        return .done
+    }
+}

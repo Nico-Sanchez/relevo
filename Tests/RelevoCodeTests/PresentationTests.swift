@@ -109,6 +109,57 @@ import Testing
         ])
     }
 
+    func tool(_ id: String, _ name: String, _ input: [String: Any] = [:], _ state: ToolCall.State = .done) -> ToolCall {
+        var call = ToolCall(id: id, name: name, input: JSONValue(input))
+        call.state = state
+        return call
+    }
+
+    @Test func groupsToolCallsThatRunBackToBack() {
+        let a = tool("t1", "Bash")
+        let b = tool("t2", "Read")
+        let c = tool("t3", "Edit")
+        let items = [
+            TranscriptItem(id: "u", kind: .user("Fix it")),
+            TranscriptItem(id: "1", kind: .tool(a)),
+            TranscriptItem(id: "2", kind: .tool(b)),
+            TranscriptItem(id: "x", kind: .assistant("Found it.")),
+            TranscriptItem(id: "3", kind: .tool(c)),
+        ]
+
+        #expect(TranscriptRow.rows(items) == [
+            .item(items[0]),
+            .tools(id: "1", calls: [a, b]),
+            .item(items[3]),
+            .item(items[4]),
+        ])
+    }
+
+    @Test func summarizesAGroupByWhatItDid() {
+        let calls = [
+            tool("1", "Bash", ["command": "swift build"]),
+            tool("2", "Read", ["file_path": "/a.swift"]),
+            tool("3", "Bash", ["command": "swift test"]),
+            tool("4", "Edit", ["file_path": "/a.swift"]),
+            tool("5", "Edit", ["file_path": "/a.swift"]),
+            tool("6", "Write", ["file_path": "/b.swift"]),
+            tool("7", "Grep", ["pattern": "TODO"]),
+            tool("8", "WebFetch", ["url": "https://example.com"]),
+            tool("9", "TodoWrite"),
+            tool("10", "Task"),
+            tool("11", "mcp__x__y"),
+        ]
+
+        #expect(ToolActivity.summarize(calls) == [.commands(2), .reads(1), .edits(2), .searches, .web, .todos, .agents(1), .tools(1)])
+    }
+
+    @Test func showsTheStateThatMattersMostInAGroup() {
+        #expect(ToolActivity.state(of: [tool("1", "Bash"), tool("2", "Bash", [:], .failed)]) == .failed)
+        #expect(ToolActivity.state(of: [tool("1", "Bash", [:], .failed), tool("2", "Bash", [:], .running)]) == .running)
+        #expect(ToolActivity.state(of: [tool("1", "Bash", [:], .running), tool("2", "Bash", [:], .awaitingPermission)]) == .awaitingPermission)
+        #expect(ToolActivity.state(of: [tool("1", "Bash"), tool("2", "Read")]) == .done)
+    }
+
     @Test func quotesTextIntoTheDraft() {
         #expect(Quote.insert("Ollama 0.40.18\n\nruns as a service", into: "") == "> Ollama 0.40.18\n>\n> runs as a service\n\n")
         #expect(Quote.insert("  20 GB ", into: "Why so big?\n") == "Why so big?\n\n> 20 GB\n\n")

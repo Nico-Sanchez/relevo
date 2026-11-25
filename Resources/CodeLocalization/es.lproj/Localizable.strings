@@ -58,6 +58,8 @@
 "Don’t ask" = "No preguntar";
 "Earlier messages aren't shown." = "No se muestran los mensajes anteriores.";
 "Earlier messages were summarized to free up context." = "Los mensajes anteriores se resumieron para liberar contexto.";
+"Edited %lld files" = "Editó %lld archivos";
+"Edited a file" = "Editó un archivo";
 "Effort: %@" = "Esfuerzo: %@";
 "Extra high" = "Extra alto";
 "Finished its turn" = "Terminó su turno";
@@ -110,6 +112,12 @@
 "Quote" = "Citar";
 "Quote Selection" = "Citar selección";
 "Quote the selected text in your message" = "Citar el texto seleccionado en tu mensaje";
+"Ran %lld agents" = "Ejecutó %lld agentes";
+"Ran %lld commands" = "Se ejecutaron %lld comandos";
+"Ran a command" = "Ejecutó un comando";
+"Ran an agent" = "Ejecutó un agente";
+"Read %lld files" = "Leyó %lld archivos";
+"Read a file" = "Leyó un archivo";
 "Recent" = "Recientes";
 "Refresh" = "Actualizar";
 "Relevo Code" = "Relevo Code";
@@ -117,6 +125,8 @@
 "Review feedback" = "Feedback de review";
 "Scope" = "Alcance";
 "Search sessions" = "Buscar sesiones";
+"Searched files" = "Buscó archivos";
+"Searched the web" = "Se buscó en la web";
 "See all %lld…" = "Ver todas (%lld)…";
 "Send (Return)" = "Enviar (Return)";
 "Send a message to continue this session…" = "Mandá un mensaje para retomar esta sesión…";
@@ -143,6 +153,9 @@
 "This session's folder doesn't exist anymore." = "La carpeta de esta sesión ya no existe.";
 "Uncommitted" = "Sin commitear";
 "Unread" = "Sin leer";
+"Updated todos" = "Tareas actualizadas";
+"Used %lld tools" = "Se usaron %lld herramientas";
+"Used a tool" = "Usó una herramienta";
 "Waiting for you" = "Te está esperando";
 "Wants to use %@" = "Quiere usar %@";
 "Week" = "Semana";

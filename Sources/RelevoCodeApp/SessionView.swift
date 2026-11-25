@@ -108,14 +108,24 @@ extension SessionView {
 
 struct Transcript: View {
     let session: Session
+    @State private var expanded: Set<String> = []
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
-                    ForEach(session.items) { item in
-                        ItemView(item: item, directory: session.workingDirectory, steering: session.steering.contains(item.id))
-                            .id(item.id)
+                    ForEach(TranscriptRow.rows(session.items)) { row in
+                        switch row {
+                        case .item(let item):
+                            ItemView(item: item, directory: session.workingDirectory, steering: session.steering.contains(item.id))
+                                .id(item.id)
+                        case .tools(let id, let calls):
+                            ToolGroupView(calls: calls, directory: session.workingDirectory, expanded: Binding(
+                                get: { expanded.contains(id) },
+                                set: { if $0 { expanded.insert(id) } else { expanded.remove(id) } }
+                            ))
+                            .id(id)
+                        }
                     }
                     if session.status == .working || session.status == .starting {
                         HStack(spacing: 8) {
@@ -311,6 +321,81 @@ struct ToolCallView: View {
         case "TodoWrite": "checklist"
         case "AskUserQuestion": "questionmark.bubble"
         default: "wrench.and.screwdriver"
+        }
+    }
+}
+
+struct ToolGroupView: View {
+    let calls: [ToolCall]
+    let directory: URL
+    @Binding var expanded: Bool
+
+    private var current: ToolCall? {
+        calls.last { $0.state == .running || $0.state == .awaitingPermission }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.snappy(duration: 0.15)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: ToolCallView.icon(for: (current ?? calls[0]).name))
+                        .frame(width: 16)
+                        .foregroundStyle(.secondary)
+                    Text(Self.summary(of: calls))
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                    if let current {
+                        Text(current.summary(relativeTo: directory))
+                            .font(.system(.callout, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Spacer(minLength: 8)
+                    ToolState(state: ToolActivity.state(of: calls))
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
+            if expanded {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(calls, id: \.id) { call in
+                        ToolCallView(call: call, directory: directory)
+                    }
+                }
+                .padding(.leading, 18)
+            }
+        }
+    }
+
+    static func summary(of calls: [ToolCall]) -> String {
+        let phrases = ToolActivity.summarize(calls).map(phrase)
+        let joined = phrases.enumerated().map { index, phrase in
+            index == 0 ? phrase : phrase.prefix(1).lowercased() + phrase.dropFirst()
+        }
+        return ListFormatter.localizedString(byJoining: joined)
+    }
+
+    static func phrase(_ activity: ToolActivity) -> String {
+        switch activity {
+        case .commands(let count): count == 1 ? String(localized: "Ran a command") : String(localized: "Ran \(count) commands")
+        case .reads(let count): count == 1 ? String(localized: "Read a file") : String(localized: "Read \(count) files")
+        case .edits(let count): count == 1 ? String(localized: "Edited a file") : String(localized: "Edited \(count) files")
+        case .searches: String(localized: "Searched files")
+        case .web: String(localized: "Searched the web")
+        case .todos: String(localized: "Updated todos")
+        case .agents(let count): count == 1 ? String(localized: "Ran an agent") : String(localized: "Ran \(count) agents")
+        case .tools(let count): count == 1 ? String(localized: "Used a tool") : String(localized: "Used \(count) tools")
         }
     }
 }

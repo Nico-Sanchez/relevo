@@ -413,6 +413,44 @@ struct ResizeRenderTests {
         window.close()
     }
 
+    @Test func rendersGroupedToolCalls() async throws {
+        _ = NSApplication.shared
+        func call(_ id: String, _ name: String, _ input: [String: Any], _ state: ToolCall.State = .done) -> ToolCall {
+            var call = ToolCall(id: id, name: name, input: JSONValue(input))
+            call.state = state
+            return call
+        }
+        let done = [
+            call("1", "Bash", ["command": "brew install ollama"]),
+            call("2", "Bash", ["command": "ollama pull inkling-2-mini"]),
+            call("3", "Read", ["file_path": "/Users/ana/code/vertex/README.md"]),
+            call("4", "Edit", ["file_path": "/Users/ana/code/vertex/Makefile"]),
+        ]
+        let running = [
+            call("5", "Read", ["file_path": "/Users/ana/code/vertex/a.swift"]),
+            call("6", "Bash", ["command": "swift test --filter Uploader"], .running),
+        ]
+        let view = VStack(alignment: .leading, spacing: 10) {
+            ToolGroupView(calls: done, directory: URL(filePath: "/Users/ana/code/vertex"), expanded: .constant(false))
+            ToolGroupView(calls: running, directory: URL(filePath: "/Users/ana/code/vertex"), expanded: .constant(false))
+            ToolGroupView(calls: done, directory: URL(filePath: "/Users/ana/code/vertex"), expanded: .constant(true))
+        }
+        .padding(20)
+        .frame(width: 640)
+        let hosting = NSHostingView(rootView: view)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.setContentSize(hosting.fittingSize)
+        window.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(500))
+        let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        try #require(bitmap.representation(using: .png, properties: [:]))
+            .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-tool-groups.png"))
+        window.close()
+    }
+
     @Test func rendersTheAccountList() async throws {
         _ = NSApplication.shared
         let (model, scene) = narrow()
