@@ -8,6 +8,7 @@ struct SessionView: View {
     let window: WindowModel
     @State private var draft = ""
     @AppStorage("showingSidePane") private var showingSidePane = true
+    @State private var isRepository = true
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,9 +36,13 @@ struct SessionView: View {
             .padding(.bottom, 16)
         }
         .background(Color(nsColor: .textBackgroundColor))
-        .inspector(isPresented: $showingSidePane) {
+        .inspector(isPresented: Binding(get: { showingSidePane && isRepository }, set: { showingSidePane = $0 })) {
             SidePane(session: session, monitor: model.monitors[session.id], environment: model.environment ?? [:])
                 .inspectorColumnWidth(min: 280, ideal: 360, max: 640)
+        }
+        .task(id: session.workingDirectory) {
+            let directory = session.workingDirectory
+            isRepository = await Task.detached { GitDiff.isRepository(directory) }.value
         }
         .navigationTitle(session.title)
         .navigationSubtitle(session.workingDirectory.path)
@@ -65,7 +70,8 @@ struct SessionView: View {
                 } label: {
                     Label("Changes and Pull Request", systemImage: "sidebar.right")
                 }
-                .help("Show changes and the pull request")
+                .help(isRepository ? String(localized: "Show changes and the pull request") : String(localized: "This folder isn't a git repository."))
+                .disabled(!isRepository)
                 if session.cost > 0 {
                     Text(session.cost, format: .currency(code: "USD"))
                         .monospacedDigit()

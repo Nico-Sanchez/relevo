@@ -197,8 +197,10 @@ struct PaneRenderTests {
 struct ResizeRenderTests {
     func narrow() -> (model: AppModel, window: WindowModel) {
         let model = AppModel()
+        let repository = FileManager.default.temporaryDirectory.appending(path: "relevo-render-vertex")
+        try? FileManager.default.createDirectory(at: repository.appending(path: ".git"), withIntermediateDirectories: true)
         let session = Session(
-            configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")),
+            configuration: SessionConfiguration(directory: repository),
             accountName: "nicolas.sanchez@lambdaclass.example", title: "vertex", dormant: true
         )
         let working = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")), accountName: "ana@example.com", title: "Facturación en México")

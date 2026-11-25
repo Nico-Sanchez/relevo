@@ -28,6 +28,18 @@ public struct DiffResult: Sendable, Equatable {
 }
 
 public enum GitDiff {
+    public static func isRepository(_ directory: URL) -> Bool {
+        var components = directory.standardizedFileURL.pathComponents
+        while !components.isEmpty {
+            let folder = URL(filePath: NSString.path(withComponents: components + [".git"]))
+            if FileManager.default.fileExists(atPath: folder.path) {
+                return true
+            }
+            components.removeLast()
+        }
+        return false
+    }
+
     public static func load(in directory: URL, scope: DiffScope, environment: [String: String]) throws -> DiffResult {
         let git = Git(directory: directory, environment: environment)
         var base: String?

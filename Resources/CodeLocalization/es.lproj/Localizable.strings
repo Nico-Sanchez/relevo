@@ -129,6 +129,7 @@
 "Thinking" = "Pensando";
 "This branch has no pull request." = "Este branch no tiene pull request.";
 "This branch matches %@." = "Este branch no tiene cambios respecto de %@.";
+"This folder isn't a git repository." = "Esta carpeta no es un repositorio de git.";
 "This session ended." = "Esta sesión terminó.";
 "This session's folder doesn't exist anymore." = "La carpeta de esta sesión ya no existe.";
 "Uncommitted" = "Sin commitear";

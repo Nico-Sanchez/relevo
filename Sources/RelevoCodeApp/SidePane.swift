@@ -117,6 +117,11 @@ struct ChangesView: View {
             problem = String(localized: "This session's folder doesn't exist anymore.")
             return
         }
+        guard GitDiff.isRepository(directory) else {
+            result = nil
+            problem = String(localized: "This folder isn't a git repository.")
+            return
+        }
         let scope = scope
         let environment = environment
         let loaded = await Task.detached { Result { try GitDiff.load(in: directory, scope: scope, environment: environment) } }.value
@@ -125,7 +130,7 @@ struct ChangesView: View {
             result = value
             problem = nil
         case .failure(let error):
-            problem = String(describing: error)
+            problem = String(describing: error).split(separator: "\n").first.map(String.init) ?? String(describing: error)
         }
     }
 

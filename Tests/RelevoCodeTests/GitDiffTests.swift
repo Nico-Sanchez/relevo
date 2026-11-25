@@ -90,4 +90,17 @@ import Testing
 
         #expect(throws: GitError.self) { try GitDiff.load(in: folder, scope: .uncommitted, environment: [:]) }
     }
+
+    @Test func knowsWhetherAFolderIsInsideARepository() throws {
+        let folder = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let nested = folder.appending(path: "Sources/App")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+
+        #expect(!GitDiff.isRepository(nested))
+
+        try FileManager.default.createDirectory(at: folder.appending(path: ".git"), withIntermediateDirectories: true)
+        #expect(GitDiff.isRepository(folder))
+        #expect(GitDiff.isRepository(nested))
+    }
 }
