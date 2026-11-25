@@ -1098,11 +1098,17 @@ struct NewSessionView: View {
 
     static var modes: [(String, String)] {
         [
-            ("default", String(localized: "Ask before acting")),
+            ("default", String(localized: "Manual")),
             ("acceptEdits", String(localized: "Accept edits")),
-            ("plan", String(localized: "Plan only")),
+            ("plan", String(localized: "Plan")),
+            ("auto", String(localized: "Auto")),
+            ("dontAsk", String(localized: "Don’t ask")),
             ("bypassPermissions", String(localized: "Bypass permissions")),
         ]
+    }
+
+    static func canonical(_ mode: String) -> String {
+        mode == "manual" ? "default" : mode
     }
 
     private var isRepository: Bool {

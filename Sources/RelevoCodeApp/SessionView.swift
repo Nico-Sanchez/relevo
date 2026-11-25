@@ -702,7 +702,7 @@ struct Composer: View {
     }
 
     static func modeName(_ mode: String) -> String {
-        NewSessionView.modes.first { $0.0 == mode }?.1 ?? mode
+        NewSessionView.modes.first { $0.0 == NewSessionView.canonical(mode) }?.1 ?? mode
     }
 }
 
@@ -914,7 +914,7 @@ struct SessionControls: View {
     }
 
     private var effortLabel: String {
-        session.effort.map(SessionControls.effortName) ?? String(localized: "Default effort")
+        session.effort.map(SessionControls.effortName) ?? String(localized: "Default model effort")
     }
 
     private func controls(compact: Bool) -> some View {
@@ -924,7 +924,7 @@ struct SessionControls: View {
                     Button {
                         session.setPermissionMode(mode.0)
                     } label: {
-                        if mode.0 == session.permissionMode {
+                        if mode.0 == NewSessionView.canonical(session.permissionMode) {
                             Label(mode.1, systemImage: "checkmark")
                         } else {
                             Text(mode.1)
@@ -959,27 +959,20 @@ struct SessionControls: View {
                 }
             }
             .help(modelName)
-            Menu {
-                Button("Default") { session.setEffort(nil) }
-                ForEach(efforts, id: \.self) { level in
-                    Button {
-                        session.setEffort(level)
-                    } label: {
-                        if level == session.effort {
-                            Label(SessionControls.effortName(level), systemImage: "checkmark")
-                        } else {
-                            Text(SessionControls.effortName(level))
-                        }
+            if compact || efforts.count < 2 {
+                Menu {
+                    EffortChoices(session: session, levels: efforts)
+                } label: {
+                    if compact {
+                        Image(systemName: "gauge.with.dots.needle.50percent")
+                    } else {
+                        Text(effortLabel)
                     }
                 }
-            } label: {
-                if compact {
-                    Image(systemName: "gauge.with.dots.needle.50percent")
-                } else {
-                    Text(effortLabel)
-                }
+                .help(String(localized: "Effort: \(effortLabel)"))
+            } else {
+                EffortSlider(session: session, levels: efforts)
             }
-            .help(effortLabel)
         }
         .menuStyle(.button)
         .buttonStyle(.bordered)
@@ -991,6 +984,8 @@ struct SessionControls: View {
         switch mode {
         case "acceptEdits": "pencil"
         case "plan": "list.bullet.clipboard"
+        case "auto": "sparkles"
+        case "dontAsk": "hand.raised.slash"
         case "bypassPermissions": "exclamationmark.shield"
         default: "hand.raised"
         }
@@ -998,13 +993,83 @@ struct SessionControls: View {
 
     static func effortName(_ level: String) -> String {
         switch level {
-        case "low": String(localized: "Low effort")
-        case "medium": String(localized: "Medium effort")
-        case "high": String(localized: "High effort")
-        case "xhigh": String(localized: "Extra high effort")
-        case "max": String(localized: "Max effort")
+        case "low": String(localized: "Low")
+        case "medium": String(localized: "Medium")
+        case "high": String(localized: "High")
+        case "xhigh": String(localized: "Extra high")
+        case "max": String(localized: "Max")
         default: level
         }
+    }
+}
+
+struct EffortChoices: View {
+    let session: Session
+    let levels: [String]
+
+    var body: some View {
+        Button {
+            session.setEffort(nil)
+        } label: {
+            if session.effort == nil {
+                Label("Default model effort", systemImage: "checkmark")
+            } else {
+                Text("Default model effort")
+            }
+        }
+        Divider()
+        ForEach(levels, id: \.self) { level in
+            Button {
+                session.setEffort(level)
+            } label: {
+                if level == session.effort {
+                    Label(SessionControls.effortName(level), systemImage: "checkmark")
+                } else {
+                    Text(SessionControls.effortName(level))
+                }
+            }
+        }
+    }
+}
+
+struct EffortSlider: View {
+    let session: Session
+    let levels: [String]
+
+    private var position: Double {
+        Double(session.effort.flatMap(levels.firstIndex(of:)) ?? (levels.count - 1) / 2)
+    }
+
+    private var name: String {
+        session.effort.map(SessionControls.effortName) ?? String(localized: "Default")
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "gauge.with.dots.needle.50percent")
+                .foregroundStyle(.secondary)
+            Slider(
+                value: Binding(get: { position }, set: { value in
+                    let level = levels[min(max(Int(value.rounded()), 0), levels.count - 1)]
+                    if level != session.effort {
+                        session.setEffort(level)
+                    }
+                }),
+                in: 0...Double(levels.count - 1), step: 1
+            )
+            .controlSize(.mini)
+            .frame(width: 84)
+            .opacity(session.effort == nil ? 0.55 : 1)
+            Menu {
+                EffortChoices(session: session, levels: levels)
+            } label: {
+                Text(name)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+        .help(String(localized: "Effort: \(session.effort.map(SessionControls.effortName) ?? String(localized: "Default model effort"))"))
     }
 }
 
