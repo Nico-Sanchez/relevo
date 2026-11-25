@@ -87,6 +87,8 @@ public final class Session: Identifiable {
     public private(set) var lastTurnEnded: Date?
     public private(set) var steering: Set<String> = []
     public private(set) var backgroundTasks: [RunningTask] = []
+    public private(set) var applied: AppliedSettings?
+    @ObservationIgnored public var onReady: ((SessionInfo) -> Void)?
     @ObservationIgnored public var onMoment: ((Moment) -> Void)?
     @ObservationIgnored public var onFirstMessage: ((String) -> Void)?
 
@@ -98,6 +100,7 @@ public final class Session: Identifiable {
     private var toolIndex: [String: Int] = [:]
     private var requests = 0
     private var initializeID: String?
+    private var settingsID: String?
     private var changes: [String: Notice.Setting] = [:]
 
     public init(
@@ -334,17 +337,27 @@ public final class Session: Identifiable {
     func apply(_ event: Incoming) {
         switch event {
         case .controlResponse(let requestID, let success, let payload):
-            if let what = changes.removeValue(forKey: requestID), !success {
-                append(.notice(.refused(what, payload.string)))
+            if let what = changes.removeValue(forKey: requestID) {
+                if success {
+                    refreshSettings()
+                } else {
+                    append(.notice(.refused(what, payload.string)))
+                }
+            }
+            if requestID == settingsID, success {
+                applied = Wire.appliedSettings(from: payload)
             }
             if requestID == initializeID {
-                info = Wire.sessionInfo(from: payload)
-                if let mode = info?.permissionMode {
+                let info = Wire.sessionInfo(from: payload)
+                self.info = info
+                if let mode = info.permissionMode {
                     permissionMode = mode
                 }
                 if status == .starting {
                     status = .idle
                 }
+                onReady?(info)
+                refreshSettings()
             }
         case .sessionStarted(let id, let model, let mode, let directory):
             if status == .idle {
@@ -434,6 +447,12 @@ public final class Session: Identifiable {
         case .ignored:
             break
         }
+    }
+
+    private func refreshSettings() {
+        let id = nextRequestID()
+        settingsID = id
+        process?.send(Wire.controlRequest(id: id, ["subtype": "get_settings"]))
     }
 
     func beginInitialize() -> String {

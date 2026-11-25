@@ -451,6 +451,45 @@ struct ResizeRenderTests {
         window.close()
     }
 
+    @Test func rendersTheModelAndEffortPicker() async throws {
+        _ = NSApplication.shared
+        let levels: [Any] = ["low", "medium", "high", "xhigh", "max"]
+        let session = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")), accountName: "ana@example.com", title: "Picker")
+        session.apply(.controlResponse(requestID: "relevo_1", success: true, payload: .object([:])))
+        let models = [
+            ModelOption(value: "default", displayName: "Default (recommended)", description: nil, effortLevels: levels as! [String], resolvedModel: "claude-opus-5-5"),
+            ModelOption(value: "opus", displayName: "Opus 5.5", description: nil, effortLevels: levels as! [String], resolvedModel: "claude-opus-5-5"),
+            ModelOption(value: "fable", displayName: "Fable 5.2", description: nil, effortLevels: levels as! [String], resolvedModel: "claude-fable-5-2"),
+            ModelOption(value: "sonnet", displayName: "Sonnet 5.5", description: nil, effortLevels: levels as! [String], resolvedModel: "claude-sonnet-5-5"),
+            ModelOption(value: "haiku", displayName: "Haiku 5.5", description: nil, effortLevels: levels as! [String], resolvedModel: "claude-haiku-5-5"),
+            ModelOption(value: "claude-opus-4-8", displayName: "Opus 4.8", description: nil, effortLevels: levels as! [String], resolvedModel: "claude-opus-4-8"),
+        ]
+        let view = VStack(alignment: .leading, spacing: 16) {
+            Composer(session: session, draft: .constant(""), models: models, fallbackEffort: "xhigh")
+            HStack(alignment: .top, spacing: 16) {
+                ModelPanel(session: session, options: models, model: nil, effort: "xhigh", levels: levels as! [String])
+                    .background(.background, in: RoundedRectangle(cornerRadius: 10))
+                ModelPanel(session: session, options: models, model: "fable", effort: "max", levels: levels as! [String])
+                    .background(.background, in: RoundedRectangle(cornerRadius: 10))
+            }
+        }
+        .padding(20)
+        .frame(width: 720)
+        .background(Color(nsColor: .windowBackgroundColor))
+        let hosting = NSHostingView(rootView: view)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.setContentSize(hosting.fittingSize)
+        window.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(600))
+        let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        try #require(bitmap.representation(using: .png, properties: [:]))
+            .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-model-picker.png"))
+        window.close()
+    }
+
     @Test func rendersTheAccountList() async throws {
         _ = NSApplication.shared
         let (model, scene) = narrow()

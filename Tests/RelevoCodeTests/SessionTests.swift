@@ -119,6 +119,38 @@ import Testing
         return (session, log)
     }
 
+    func sent(_ log: URL, count: Int) async throws -> [JSONValue] {
+        var requests: [JSONValue] = []
+        for _ in 0..<40 {
+            requests = (try? String(contentsOf: log, encoding: .utf8))?.split(separator: "\n").compactMap { line in
+                (try? JSONSerialization.jsonObject(with: Data(line.utf8))).map(JSONValue.init)
+            } ?? []
+            if requests.count >= count { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        return requests
+    }
+
+    @Test func asksTheCLIWhichModelAndEffortItApplies() async throws {
+        let (session, log) = try fakeSession()
+        defer { session.stop() }
+        var ready: [SessionInfo] = []
+        session.onReady = { ready.append($0) }
+
+        session.apply(.controlResponse(requestID: "relevo_1", success: true, payload: JSONValue(["models": [["value": "opus", "displayName": "Opus 5.5"]]])))
+        let afterInitialize = try await sent(log, count: 2)
+        #expect(afterInitialize.compactMap { $0["request"]?["subtype"]?.string } == ["initialize", "get_settings"])
+        #expect(ready.map(\.models.count) == [1])
+
+        session.apply(.controlResponse(requestID: "relevo_2", success: true, payload: JSONValue(["applied": ["model": "claude-opus-5-5", "effort": "xhigh"]])))
+        #expect(session.applied == AppliedSettings(model: "claude-opus-5-5", effort: "xhigh"))
+
+        session.setModel("sonnet")
+        session.apply(.controlResponse(requestID: "relevo_3", success: true, payload: .object([:])))
+        let afterChange = try await sent(log, count: 4)
+        #expect(afterChange.compactMap { $0["request"]?["subtype"]?.string } == ["initialize", "get_settings", "set_model", "get_settings"])
+    }
+
     @Test func announcesOnlyTheFirstMessageOfAnUntitledSession() throws {
         let (session, _) = try fakeSession()
         defer { session.stop() }

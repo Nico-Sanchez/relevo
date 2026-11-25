@@ -6,20 +6,32 @@ public struct AccountInfo: Sendable, Equatable {
     public let subscription: String?
 }
 
-public struct ModelOption: Sendable, Equatable, Identifiable {
+public struct ModelOption: Sendable, Equatable, Identifiable, Codable {
     public let value: String
     public let displayName: String
     public let description: String?
     public let effortLevels: [String]
+    public let resolvedModel: String?
 
-    public init(value: String, displayName: String, description: String?, effortLevels: [String]) {
+    public init(value: String, displayName: String, description: String?, effortLevels: [String], resolvedModel: String? = nil) {
         self.value = value
         self.displayName = displayName
         self.description = description
         self.effortLevels = effortLevels
+        self.resolvedModel = resolvedModel
     }
 
     public var id: String { value }
+}
+
+public struct AppliedSettings: Sendable, Equatable {
+    public let model: String?
+    public let effort: String?
+
+    public init(model: String?, effort: String?) {
+        self.model = model
+        self.effort = effort
+    }
 }
 
 public struct SessionInfo: Sendable, Equatable {
@@ -172,6 +184,11 @@ public enum Wire {
         }
     }
 
+    public static func appliedSettings(from payload: JSONValue) -> AppliedSettings? {
+        guard let applied = payload["applied"] else { return nil }
+        return AppliedSettings(model: applied["model"]?.string, effort: applied["effort"]?.string)
+    }
+
     public static func sessionInfo(from payload: JSONValue) -> SessionInfo {
         let account = payload["account"].map {
             AccountInfo(email: $0["email"]?.string, organization: $0["organization"]?.string, subscription: $0["subscriptionType"]?.string)
@@ -182,7 +199,8 @@ public enum Wire {
                 value: value,
                 displayName: model["displayName"]?.string ?? value,
                 description: model["description"]?.string,
-                effortLevels: (model["supportedEffortLevels"]?.array ?? []).compactMap(\.string)
+                effortLevels: (model["supportedEffortLevels"]?.array ?? []).compactMap(\.string),
+                resolvedModel: model["resolvedModel"]?.string
             )
         }
         return SessionInfo(

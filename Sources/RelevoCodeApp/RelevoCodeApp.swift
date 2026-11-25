@@ -47,6 +47,8 @@ final class AppModel {
     @ObservationIgnored var activate: () -> Void = { NSApp?.activate() }
     @ObservationIgnored var titleMaker: ((String, ClaudeAccount) async -> String?)?
     private(set) var titles: [String: String]
+    private(set) var catalogs: [String: [ModelOption]]
+    private(set) var accountEfforts: [String: String]
 
     let notifier: any Notifier
     private let defaults: UserDefaults
@@ -63,6 +65,8 @@ final class AppModel {
         assigned = (defaults.dictionary(forKey: "sessionAccounts") as? [String: String]) ?? [:]
         themes = ((defaults.dictionary(forKey: "accountThemes") as? [String: String]) ?? [:]).compactMapValues(AccountTheme.init)
         titles = (defaults.dictionary(forKey: "sessionTitles") as? [String: String]) ?? [:]
+        catalogs = defaults.data(forKey: "modelCatalogs").flatMap { try? JSONDecoder().decode([String: [ModelOption]].self, from: $0) } ?? [:]
+        accountEfforts = (defaults.dictionary(forKey: "accountEfforts") as? [String: String]) ?? [:]
         notifier.onOpen = { [weak self] in self?.reveal($0) }
     }
 
@@ -156,6 +160,7 @@ final class AppModel {
         }
         notifier.authorize()
         await refreshAccounts()
+        Task { await probeCatalogs() }
         await refreshRecent()
         keepRecentFresh()
     }
@@ -393,6 +398,46 @@ final class AppModel {
             guard let self, let session else { return }
             Task { await self.name(session, from: text) }
         }
+        session.onReady = { [weak self, weak session] info in
+            guard let self, let session, !info.models.isEmpty else { return }
+            self.remember(info.models, for: self.owner(of: session))
+        }
+    }
+
+    var cliFolder: URL {
+        (FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory)
+            .appending(path: Bundle.main.bundleIdentifier ?? "relevo-code").appending(path: "cli")
+    }
+
+    func probeCatalogs() async {
+        guard let executable, let environment else { return }
+        for account in accounts where catalogs[account.id] == nil {
+            guard let found = await ModelCatalog.probe(account: account, environment: environment, executable: executable, folder: cliFolder) else { continue }
+            remember(found.models, for: account)
+            if let effort = found.applied?.effort {
+                accountEfforts[account.id] = effort
+                defaults.set(accountEfforts, forKey: "accountEfforts")
+            }
+        }
+    }
+
+    func remember(_ models: [ModelOption], for account: ClaudeAccount) {
+        guard catalogs[account.id] != models else { return }
+        catalogs[account.id] = models
+        if let data = try? JSONEncoder().encode(catalogs) {
+            defaults.set(data, forKey: "modelCatalogs")
+        }
+    }
+
+    func models(for session: Session) -> [ModelOption] {
+        catalogs[owner(of: session).id] ?? []
+    }
+
+    func fallbackEffort(for session: Session) -> String {
+        let account = owner(of: session)
+        let model = ModelCatalog.resolved(session.selectedModel, in: models(for: session))
+        return ModelCatalog.configuredEffort(in: session.workingDirectory, account: account, model: model)
+            ?? accountEfforts[account.id] ?? ModelCatalog.recommendedEffort
     }
 
     func name(_ session: Session, from text: String) async {
@@ -401,10 +446,8 @@ final class AppModel {
         if let titleMaker {
             title = await titleMaker(text, account)
         } else if let executable, let environment {
-            let folder = (FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory)
-                .appending(path: Bundle.main.bundleIdentifier ?? "relevo-code").appending(path: "titles")
             title = await SessionTitle.generate(
-                for: text, configDirectory: account.configDirectory, environment: environment, executable: executable, folder: folder
+                for: text, configDirectory: account.configDirectory, environment: environment, executable: executable, folder: cliFolder
             )
         } else {
             title = nil

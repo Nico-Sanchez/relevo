@@ -69,7 +69,7 @@ public enum SessionTitle {
     }
 }
 
-private final class Watchdog: @unchecked Sendable {
+final class Watchdog: @unchecked Sendable {
     private let process: Process
 
     init(_ process: Process) {

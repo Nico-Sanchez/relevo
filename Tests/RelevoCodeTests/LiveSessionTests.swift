@@ -177,6 +177,20 @@ struct LiveSessionTests {
         try await waitUntil { session.backgroundTasks.isEmpty && session.status == .idle && lastReply(session)?.contains("BG-DONE") == true }
     }
 
+    @Test func readsAnAccountsModelsAndEffortWithoutAnAPICall() async throws {
+        let environment = ShellEnvironment.load()
+        let executable = try #require(ShellEnvironment.claudeExecutable(in: environment))
+        let folder = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Caches/dev.nicosanchez.relevo.code/cli")
+
+        let found = try #require(await ModelCatalog.probe(
+            account: ClaudeAccount(configDirectory: account), environment: environment, executable: executable, folder: folder
+        ))
+
+        #expect(ModelCatalog.name(of: nil, in: found.models) != nil, "\(found.models.map(\.value))")
+        #expect(found.applied?.model?.hasPrefix("claude-") == true)
+        #expect(found.applied?.effort != nil)
+    }
+
     @Test func namesASessionWithHaiku() async throws {
         let environment = ShellEnvironment.load()
         let executable = try #require(ShellEnvironment.claudeExecutable(in: environment))

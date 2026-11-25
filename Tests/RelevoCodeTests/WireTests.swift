@@ -158,6 +158,20 @@ let toolResultLine = #"""
         #expect(event(#"{"type":"system","subtype":"background_tasks_changed","tasks":[]}"#) == .backgroundTasks([]))
     }
 
+    @Test func readsWhatModelAndEffortTheCLIApplies() {
+        let payload = JSONValue([
+            "applied": ["model": "claude-opus-5-5", "effort": "xhigh", "ultracode": false],
+            "effective": ["effortLevel": "xhigh"],
+        ])
+        #expect(Wire.appliedSettings(from: payload) == AppliedSettings(model: "claude-opus-5-5", effort: "xhigh"))
+        #expect(Wire.appliedSettings(from: JSONValue(["effective": [:]])) == nil)
+
+        let info = Wire.sessionInfo(from: JSONValue(["models": [
+            ["value": "default", "resolvedModel": "claude-opus-5-5", "displayName": "Default (recommended)", "supportedEffortLevels": ["low", "medium"]],
+        ]]))
+        #expect(info.models.first?.resolvedModel == "claude-opus-5-5")
+    }
+
     @Test func buildsTheCommandLineForEachSession() {
         let directory = URL(filePath: "/tmp/project")
         let plain = SessionConfiguration(directory: directory)

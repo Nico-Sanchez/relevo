@@ -13,7 +13,7 @@ import Testing
     }
 
     @Test func namesEffortLevelsLikeClaude() {
-        #expect(["low", "medium", "high", "xhigh", "max"].map(SessionControls.effortName) == ["Low", "Medium", "High", "Extra high", "Max"])
+        #expect(["low", "medium", "high", "xhigh", "max"].map(SessionControls.effortName) == ["Low", "Medium", "High", "Extra", "Max"])
     }
 
     @Test func describesAGroupOfToolsInWords() {

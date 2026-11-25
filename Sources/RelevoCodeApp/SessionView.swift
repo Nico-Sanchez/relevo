@@ -11,6 +11,7 @@ struct SessionView: View {
     @State private var isRepository = true
     @State private var watcher = SelectionWatcher()
     @State private var focusRequest = 0
+    @State private var fallbackEffort = ModelCatalog.recommendedEffort
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,7 +35,7 @@ struct SessionView: View {
                 if case .ended(let reason) = session.status {
                     EndedBanner(reason: reason)
                 } else {
-                    Composer(session: session, draft: $draft, focusRequest: focusRequest)
+                    Composer(session: session, draft: $draft, focusRequest: focusRequest, models: model.models(for: session), fallbackEffort: fallbackEffort)
                 }
             }
             .frame(maxWidth: 780)
@@ -57,6 +58,9 @@ struct SessionView: View {
         .onDisappear {
             watcher.stop()
             window.quoteSelection = nil
+        }
+        .task(id: "\(session.workingDirectory.path)|\(session.configuration.configDirectory?.path ?? "")|\(session.selectedModel ?? "")") {
+            fallbackEffort = model.fallbackEffort(for: session)
         }
         .task(id: session.workingDirectory) {
             let directory = session.workingDirectory
@@ -734,6 +738,8 @@ struct Composer: View {
     let session: Session
     @Binding var draft: String
     var focusRequest = 0
+    var models: [ModelOption] = []
+    var fallbackEffort = ModelCatalog.recommendedEffort
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -759,7 +765,7 @@ struct Composer: View {
                     }
             }
             HStack(spacing: 10) {
-                SessionControls(session: session)
+                SessionControls(session: session, models: models, fallbackEffort: fallbackEffort)
                 Spacer()
                 if session.isBusy {
                     Button {
@@ -986,26 +992,30 @@ struct AutomatedMessageView: View {
 
 struct SessionControls: View {
     let session: Session
+    var models: [ModelOption] = []
+    var fallbackEffort = ModelCatalog.recommendedEffort
 
-    static let fallbackModels = [
-        ModelOption(value: "default", displayName: "Default", description: nil, effortLevels: []),
-        ModelOption(value: "opus", displayName: "Opus", description: nil, effortLevels: []),
-        ModelOption(value: "sonnet", displayName: "Sonnet", description: nil, effortLevels: []),
-        ModelOption(value: "haiku", displayName: "Haiku", description: nil, effortLevels: []),
-    ]
     static let fallbackEfforts = ["low", "medium", "high", "xhigh", "max"]
 
-    private var models: [ModelOption] {
+    private var options: [ModelOption] {
         let known = session.info?.models ?? []
-        return known.isEmpty ? Self.fallbackModels : known
+        return known.isEmpty ? models : known
     }
 
-    private var currentModel: ModelOption? {
-        models.first { $0.value == (session.selectedModel ?? "default") }
+    private var model: String? {
+        session.selectedModel ?? session.applied?.model
     }
 
-    private var efforts: [String] {
-        let levels = currentModel?.effortLevels ?? []
+    private var modelName: String {
+        ModelCatalog.name(of: model, in: options) ?? session.model ?? model ?? "Claude"
+    }
+
+    private var effort: String {
+        session.effort ?? session.applied?.effort ?? fallbackEffort
+    }
+
+    private var levels: [String] {
+        let levels = ModelCatalog.levels(for: model, in: options)
         return levels.isEmpty ? Self.fallbackEfforts : levels
     }
 
@@ -1015,14 +1025,6 @@ struct SessionControls: View {
             controls(compact: true)
         }
         .disabled({ if case .ended = session.status { true } else { false } }())
-    }
-
-    private var modelName: String {
-        currentModel?.displayName ?? session.model ?? session.selectedModel ?? String(localized: "Default")
-    }
-
-    private var effortLabel: String {
-        session.effort.map(SessionControls.effortName) ?? String(localized: "Default model effort")
     }
 
     private func controls(compact: Bool) -> some View {
@@ -1046,43 +1048,10 @@ struct SessionControls: View {
                     Text(Composer.modeName(session.permissionMode))
                 }
             }
+            .menuStyle(.button)
             .help(Composer.modeName(session.permissionMode))
-            Menu {
-                ForEach(models) { option in
-                    Button {
-                        session.setModel(option.value)
-                    } label: {
-                        if option.value == (session.selectedModel ?? "default") {
-                            Label(option.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(option.displayName)
-                        }
-                    }
-                }
-            } label: {
-                if compact {
-                    Image(systemName: "cpu")
-                } else {
-                    Text(modelName)
-                }
-            }
-            .help(modelName)
-            if compact || efforts.count < 2 {
-                Menu {
-                    EffortChoices(session: session, levels: efforts)
-                } label: {
-                    if compact {
-                        Image(systemName: "gauge.with.dots.needle.50percent")
-                    } else {
-                        Text(effortLabel)
-                    }
-                }
-                .help(String(localized: "Effort: \(effortLabel)"))
-            } else {
-                EffortSlider(session: session, levels: efforts)
-            }
+            ModelButton(session: session, options: options, model: model, modelName: modelName, effort: effort, levels: levels, compact: compact)
         }
-        .menuStyle(.button)
         .buttonStyle(.bordered)
         .controlSize(.small)
         .fixedSize()
@@ -1104,80 +1073,167 @@ struct SessionControls: View {
         case "low": String(localized: "Low")
         case "medium": String(localized: "Medium")
         case "high": String(localized: "High")
-        case "xhigh": String(localized: "Extra high")
+        case "xhigh": String(localized: "Extra")
         case "max": String(localized: "Max")
         default: level
         }
     }
 }
 
-struct EffortChoices: View {
+struct ModelButton: View {
     let session: Session
+    let options: [ModelOption]
+    let model: String?
+    let modelName: String
+    let effort: String
     let levels: [String]
+    let compact: Bool
+    @State private var open = false
 
     var body: some View {
         Button {
-            session.setEffort(nil)
+            open.toggle()
         } label: {
-            if session.effort == nil {
-                Label("Default model effort", systemImage: "checkmark")
+            if compact {
+                Image(systemName: "cpu")
             } else {
-                Text("Default model effort")
-            }
-        }
-        Divider()
-        ForEach(levels, id: \.self) { level in
-            Button {
-                session.setEffort(level)
-            } label: {
-                if level == session.effort {
-                    Label(SessionControls.effortName(level), systemImage: "checkmark")
-                } else {
-                    Text(SessionControls.effortName(level))
+                HStack(spacing: 5) {
+                    Text(verbatim: modelName)
+                    Text(SessionControls.effortName(effort))
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
             }
+        }
+        .help(String(localized: "\(modelName) · Effort: \(SessionControls.effortName(effort))"))
+        .popover(isPresented: $open, arrowEdge: .top) {
+            ModelPanel(session: session, options: options, model: model, effort: effort, levels: levels)
         }
     }
 }
 
-struct EffortSlider: View {
+struct ModelPanel: View {
     let session: Session
+    let options: [ModelOption]
+    let model: String?
+    let effort: String
     let levels: [String]
-
-    private var position: Double {
-        Double(session.effort.flatMap(levels.firstIndex(of:)) ?? (levels.count - 1) / 2)
-    }
-
-    private var name: String {
-        session.effort.map(SessionControls.effortName) ?? String(localized: "Default")
-    }
+    @State private var showingMore = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "gauge.with.dots.needle.50percent")
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Model")
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Slider(
-                value: Binding(get: { position }, set: { value in
-                    let level = levels[min(max(Int(value.rounded()), 0), levels.count - 1)]
-                    if level != session.effort {
-                        session.setEffort(level)
+            VStack(spacing: 2) {
+                ForEach(ModelCatalog.primary(options)) { option in
+                    row(option)
+                }
+                let more = ModelCatalog.more(options)
+                if !more.isEmpty {
+                    DisclosureGroup(isExpanded: $showingMore) {
+                        VStack(spacing: 2) {
+                            ForEach(more) { option in
+                                row(option)
+                            }
+                        }
+                    } label: {
+                        Text("More models")
+                            .foregroundStyle(.secondary)
                     }
-                }),
-                in: 0...Double(levels.count - 1), step: 1
-            )
-            .controlSize(.mini)
-            .frame(width: 84)
-            .opacity(session.effort == nil ? 0.55 : 1)
-            Menu {
-                EffortChoices(session: session, levels: levels)
-            } label: {
-                Text(name)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 2)
+                }
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+            Divider()
+            effortSection
         }
-        .help(String(localized: "Effort: \(session.effort.map(SessionControls.effortName) ?? String(localized: "Default model effort"))"))
+        .padding(14)
+        .frame(width: 320)
+    }
+
+    private func row(_ option: ModelOption) -> some View {
+        Button {
+            session.setModel(option.value)
+        } label: {
+            HStack {
+                Text(verbatim: option.displayName)
+                Spacer()
+                if ModelCatalog.isCurrent(option, model: model, in: options) {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.tint)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var effortSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text("Effort")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(SessionControls.effortName(effort))
+                    .fontWeight(.semibold)
+                if effort == ModelCatalog.recommendedEffort {
+                    Text("Recommended")
+                        .font(.caption)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                }
+                if session.effort != nil {
+                    Button {
+                        session.setEffort(nil)
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Back to the effort in your settings")
+                }
+            }
+            if levels.count > 1 {
+                Slider(
+                    value: Binding(
+                        get: { Double(levels.firstIndex(of: effort) ?? 0) },
+                        set: { value in
+                            let level = levels[min(max(Int(value.rounded()), 0), levels.count - 1)]
+                            if level != effort {
+                                session.setEffort(level)
+                            }
+                        }
+                    ),
+                    in: 0...Double(levels.count - 1), step: 1
+                )
+                HStack {
+                    ForEach(Array(levels.enumerated()), id: \.offset) { index, level in
+                        Text(SessionControls.effortName(level))
+                            .font(.caption2)
+                            .foregroundStyle(level == effort ? .primary : .secondary)
+                        if index < levels.count - 1 {
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+            }
+            Text("Higher effort means more thorough responses, but takes longer and uses your limits faster.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if effort == "max" {
+                Label("Claude thinks longer with Max effort and uses your limits faster than High.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
