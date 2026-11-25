@@ -200,24 +200,25 @@ struct MarkdownView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 case .table(let header, let rows):
-                    ScrollView(.horizontal) {
-                        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                            GridRow {
-                                ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
-                                    Text(Self.inline(cell)).fontWeight(.semibold)
-                                }
+                    Grid(alignment: .topLeading, horizontalSpacing: 16, verticalSpacing: 6) {
+                        GridRow {
+                            ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
+                                Text(Self.inline(cell))
+                                    .fontWeight(.semibold)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
-                            Divider()
-                            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                                GridRow {
-                                    ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                                        Text(Self.inline(cell))
-                                    }
+                        }
+                        Divider()
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            GridRow {
+                                ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                                    Text(Self.inline(cell))
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
                         }
-                        .padding(10)
                     }
+                    .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
                 case .rule:

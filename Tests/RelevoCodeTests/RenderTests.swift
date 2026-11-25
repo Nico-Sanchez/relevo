@@ -383,6 +383,18 @@ struct ResizeRenderTests {
 
             ---
             Pages read: [model card](https://example.com).
+
+            **Rendimiento medido en tu M3 Pro:**
+
+            | | Resultado |
+            |---|---|
+            | Primera llamada | ~20 s de carga más un calentamiento lento. Las siguientes ya andan rápido. |
+            | Generación | 9–18 tokens/s |
+            | Memoria ocupada | 22 GB de 36. Se descarga solo tras 5 minutos sin uso. |
+
+            **Ajustes a tener en cuenta:**
+            - **Razonamiento:** por defecto está en `high`, que lo hace lento.
+            - **Contexto:** Ollama lo carga con 32K tokens.
             """
         let hosting = NSHostingView(rootView: MarkdownView(text: text).padding(20).frame(width: 620))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 500), styleMask: [.titled], backing: .buffered, defer: false)

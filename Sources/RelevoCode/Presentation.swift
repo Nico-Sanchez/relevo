@@ -168,8 +168,14 @@ public enum MarkdownBlock: Equatable, Sendable {
 
     private static func tableBlock(_ lines: [String]) -> MarkdownBlock {
         let rows = lines.map { line in
-            line.trimmingCharacters(in: CharacterSet(charactersIn: "| ")).split(separator: "|", omittingEmptySubsequences: false)
-                .map { $0.trimmingCharacters(in: .whitespaces) }
+            var cells = Substring(line)
+            if cells.hasPrefix("|") {
+                cells = cells.dropFirst()
+            }
+            if cells.hasSuffix("|") {
+                cells = cells.dropLast()
+            }
+            return cells.split(separator: "|", omittingEmptySubsequences: false).map { $0.trimmingCharacters(in: .whitespaces) }
         }
         let separator = rows.count > 1 && rows[1].allSatisfy { $0.wholeMatch(of: /:?-+:?/) != nil }
         guard separator else { return .paragraph(lines.joined(separator: "\n")) }

@@ -84,6 +84,31 @@ import Testing
         ])
     }
 
+    @Test func readsAReplyWithBoldListItemsAndATableWithAnEmptyCorner() {
+        let text = """
+            Inkling 2 Mini ya corre local en tu Mac y responde bien.
+
+            **Qué instalé:**
+            - **Ollama 0.40.18**, con Homebrew.
+            - **El modelo `inkling-2-mini`** (20 GB).
+
+            **Rendimiento medido en tu M3 Pro:**
+
+            | | Resultado |
+            |---|---|
+            | Primera llamada | ~20 s |
+            | Generación | 9–18 tokens/s |
+            """
+
+        #expect(MarkdownBlock.parse(text) == [
+            .paragraph("Inkling 2 Mini ya corre local en tu Mac y responde bien."),
+            .paragraph("**Qué instalé:**"),
+            .list([.init(marker: "•", level: 0, text: "**Ollama 0.40.18**, con Homebrew."), .init(marker: "•", level: 0, text: "**El modelo `inkling-2-mini`** (20 GB).")]),
+            .paragraph("**Rendimiento medido en tu M3 Pro:**"),
+            .table(header: ["", "Resultado"], rows: [["Primera llamada", "~20 s"], ["Generación", "9–18 tokens/s"]]),
+        ])
+    }
+
     @Test func readsTablesQuotesAndRules() {
         let text = """
             | Model | Size |
