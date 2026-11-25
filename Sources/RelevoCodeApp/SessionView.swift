@@ -85,7 +85,7 @@ struct Transcript: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     ForEach(session.items) { item in
-                        ItemView(item: item, directory: session.workingDirectory)
+                        ItemView(item: item, directory: session.workingDirectory, steering: session.steering.contains(item.id))
                             .id(item.id)
                     }
                     if session.status == .working || session.status == .starting {
@@ -116,16 +116,24 @@ struct Transcript: View {
 struct ItemView: View {
     let item: TranscriptItem
     let directory: URL
+    var steering = false
 
     var body: some View {
         switch item.kind {
         case .user(let text):
-            Text(text)
-                .textSelection(.enabled)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(text)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+                if steering {
+                    Label("Claude reads this at its next step", systemImage: "clock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         case .assistant(let text):
             MarkdownView(text: text)
         case .tool(let call):
@@ -543,7 +551,7 @@ struct Composer: View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topLeading) {
                 if draft.isEmpty {
-                    Text(session.status == .dormant ? String(localized: "Send a message to continue this session…") : String(localized: "Ask Claude to do something…"))
+                    Text(placeholder)
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 8)
@@ -591,8 +599,18 @@ struct Composer: View {
         .onAppear { focused = true }
     }
 
+    private var placeholder: String {
+        if session.status == .dormant {
+            String(localized: "Send a message to continue this session…")
+        } else if session.isBusy {
+            String(localized: "Tell Claude something while it works…")
+        } else {
+            String(localized: "Ask Claude to do something…")
+        }
+    }
+
     private var canSend: Bool {
-        session.canSend && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        session.acceptsMessages && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func submit() {

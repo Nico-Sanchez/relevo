@@ -39,6 +39,7 @@
 "Claude Code refused it." = "Claude Code lo rechazó.";
 "Claude has %lld questions" = "Claude tiene %lld preguntas";
 "Claude has a question" = "Claude tiene una pregunta";
+"Claude reads this at its next step" = "Claude lo lee en su próximo paso";
 "Close" = "Cerrar";
 "Close Session" = "Cerrar la sesión";
 "Closed pull request" = "Pull request cerrado";
@@ -122,6 +123,7 @@
 "Stopped: %@" = "Se detuvo: %@";
 "Switch account" = "Cambiar de cuenta";
 "Teal" = "Turquesa";
+"Tell Claude something while it works…" = "Decile algo a Claude mientras trabaja…";
 "The turn ended with an error." = "El turno terminó con un error.";
 "The working tree is clean." = "No hay cambios sin commitear.";
 "Thinking" = "Pensando";

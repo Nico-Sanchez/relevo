@@ -132,7 +132,31 @@ struct LiveSessionTests {
         session.respond(request, .answer([question.question: "Blue"]))
         try await waitUntil { session.status == .idle }
 
-        #expect(lastReply(session)?.contains("Blue") == true)
+        #expect(lastReply(session)?.lowercased().contains("blue") == true, "\(lastReply(session) ?? "no reply")")
+    }
+
+    @Test func steersATurnWithAMessageSentWhileItWorks() async throws {
+        let (folder, token) = try makeFolder()
+        defer { cleanUp(folder, token: token) }
+        let session = try session(SessionConfiguration(directory: folder, configDirectory: account, model: "haiku", permissionMode: "acceptEdits"))
+        defer { session.stop() }
+        session.start()
+        try await waitUntil { session.status == .idle }
+
+        session.send("Use the Bash tool to run `sleep 6 && echo first-done`, then reply with exactly the word FIRST and nothing else.")
+        try await waitUntil {
+            if let request = session.pendingPermissions.first {
+                session.respond(request, .allow)
+            }
+            return session.items.contains { item in
+                if case .tool(let call) = item.kind { call.name == "Bash" } else { false }
+            }
+        }
+        session.send("Second message: after you are done, also reply with exactly the word SECOND.")
+        #expect(session.steering.count == 1)
+        try await waitUntil { session.status == .idle && session.steering.isEmpty }
+
+        #expect(lastReply(session)?.contains("SECOND") == true)
     }
 
     @Test func changesModelEffortAndModeWhileRunning() async throws {

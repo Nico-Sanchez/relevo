@@ -85,6 +85,7 @@ public final class Session: Identifiable {
     public private(set) var selectedModel: String?
     public private(set) var effort: String?
     public private(set) var lastTurnEnded: Date?
+    public private(set) var steering: Set<String> = []
     @ObservationIgnored public var onMoment: ((Moment) -> Void)?
 
     private let environment: [String: String]
@@ -143,6 +144,10 @@ public final class Session: Identifiable {
 
     public var canSend: Bool {
         status == .idle || status == .dormant
+    }
+
+    public var acceptsMessages: Bool {
+        if case .ended = status { false } else { true }
     }
 
     public func loadHistory(_ entries: [HistoryEntry]) {
@@ -263,8 +268,12 @@ public final class Session: Identifiable {
             start()
         }
         guard let process else { return }
-        append(.user(text))
-        status = .working
+        let index = append(.user(text))
+        if isBusy {
+            steering.insert(items[index].id)
+        } else {
+            status = .working
+        }
         process.send(Wire.userMessage(text))
     }
 
@@ -388,6 +397,7 @@ public final class Session: Identifiable {
         case .result(let result):
             status = .idle
             lastTurnEnded = .now
+            steering = []
             activity = nil
             isThinking = false
             cost = result.costUSD ?? cost
@@ -397,6 +407,7 @@ public final class Session: Identifiable {
             onMoment?(result.isError ? .stopped(result.text) : .finished(lastReply))
         case .exited(let code, let message):
             pendingPermissions = []
+            steering = []
             activity = nil
             isThinking = false
             lastTurnEnded = .now

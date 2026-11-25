@@ -105,6 +105,49 @@ import Testing
         #expect(session.status == .working)
     }
 
+    @Test func takesMessagesWhileClaudeWorks() async throws {
+        let folder = try temporaryFolder()
+        let log = folder.appending(path: "stdin.jsonl")
+        let cli = folder.appending(path: "claude")
+        try "#!/bin/sh\nexec cat > \"$RELEVO_FAKE_LOG\"\n".write(to: cli, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
+        let session = Session(
+            configuration: SessionConfiguration(directory: folder), accountName: "Ana",
+            environment: ["RELEVO_FAKE_LOG": log.path, "PATH": "/usr/bin:/bin"], executable: cli
+        )
+        session.start()
+        defer { session.stop() }
+
+        session.send("Fix the build")
+        #expect(session.status == .working)
+        #expect(session.steering.isEmpty)
+
+        session.send("Also update the changelog")
+        #expect(session.status == .working)
+        #expect(session.steering.count == 1)
+
+        session.apply(event(permissionLine))
+        session.send("Use the staging database")
+        #expect(session.status == .waitingForPermission)
+        #expect(session.steering.count == 2)
+
+        session.apply(.result(TurnResult(isError: false, text: "done", costUSD: nil, durationMS: nil)))
+        #expect(session.steering.isEmpty)
+
+        var sent: [String] = []
+        for _ in 0..<40 {
+            sent = (try? String(contentsOf: log, encoding: .utf8))?.split(separator: "\n").compactMap { line in
+                (try? JSONSerialization.jsonObject(with: Data(line.utf8))).map(JSONValue.init)
+            }.filter { $0["type"]?.string == "user" }.compactMap { $0["message"]?["content"]?.string } ?? []
+            if sent.count == 3 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(sent == ["Fix the build", "Also update the changelog", "Use the staging database"])
+
+        session.apply(.exited(status: 0, message: ""))
+        #expect(!session.acceptsMessages)
+    }
+
     @Test func remembersWhenTheLastTurnEnded() {
         let session = makeSession()
         session.apply(.status("requesting"))

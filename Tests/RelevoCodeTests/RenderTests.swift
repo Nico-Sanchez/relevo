@@ -332,6 +332,31 @@ struct ResizeRenderTests {
         }
     }
 
+    @Test func rendersAMessageSentWhileClaudeWorks() async throws {
+        _ = NSApplication.shared
+        let session = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")), accountName: "ana@example.com", title: "Fix the build")
+        session.apply(.status("requesting"))
+        let view = VStack(spacing: 10) {
+            ItemView(item: TranscriptItem(id: "u1", kind: .user("Also update the changelog when you're done.")), directory: session.workingDirectory, steering: true)
+            Composer(session: session, draft: .constant(""))
+            Composer(session: session, draft: .constant("Use the staging database"))
+        }
+        .padding(20)
+        .frame(width: 640)
+        let hosting = NSHostingView(rootView: view)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.setContentSize(hosting.fittingSize)
+        window.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(600))
+        let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        try #require(bitmap.representation(using: .png, properties: [:]))
+            .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-steering.png"))
+        window.close()
+    }
+
     @Test func rendersTheAccountList() async throws {
         _ = NSApplication.shared
         let (model, scene) = narrow()
