@@ -177,6 +177,20 @@ struct LiveSessionTests {
         try await waitUntil { session.backgroundTasks.isEmpty && session.status == .idle && lastReply(session)?.contains("BG-DONE") == true }
     }
 
+    @Test func namesASessionWithHaiku() async throws {
+        let environment = ShellEnvironment.load()
+        let executable = try #require(ShellEnvironment.claudeExecutable(in: environment))
+        let folder = FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Caches/dev.nicosanchez.relevo.code/titles")
+
+        let title = try #require(await SessionTitle.generate(
+            for: "Me ayudas a setupear esto? https://thinkingmachines.ai/inkling-2-mini",
+            configDirectory: account, environment: environment, executable: executable, folder: folder
+        ))
+
+        #expect((1...8).contains(title.split(separator: " ").count), "\(title)")
+        #expect(!title.contains("http"), "\(title)")
+    }
+
     @Test func changesModelEffortAndModeWhileRunning() async throws {
         let (folder, token) = try makeFolder()
         defer { cleanUp(folder, token: token) }

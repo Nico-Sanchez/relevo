@@ -105,7 +105,7 @@ import Testing
         #expect(session.status == .working)
     }
 
-    @Test func takesMessagesWhileClaudeWorks() async throws {
+    func fakeSession(title: String? = nil) throws -> (Session, URL) {
         let folder = try temporaryFolder()
         let log = folder.appending(path: "stdin.jsonl")
         let cli = folder.appending(path: "claude")
@@ -113,9 +113,35 @@ import Testing
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
         let session = Session(
             configuration: SessionConfiguration(directory: folder), accountName: "Ana",
-            environment: ["RELEVO_FAKE_LOG": log.path, "PATH": "/usr/bin:/bin"], executable: cli
+            environment: ["RELEVO_FAKE_LOG": log.path, "PATH": "/usr/bin:/bin"], executable: cli, title: title
         )
         session.start()
+        return (session, log)
+    }
+
+    @Test func announcesOnlyTheFirstMessageOfAnUntitledSession() throws {
+        let (session, _) = try fakeSession()
+        defer { session.stop() }
+        var announced: [String] = []
+        session.onFirstMessage = { announced.append($0) }
+
+        session.send("Me ayudas a setupear esto? https://thinkingmachines.ai/inkling-2-mini")
+        #expect(session.title == "Me ayudas a setupear esto?")
+        session.send("Also the docs")
+        session.rename("Configurar Inkling 2 mini")
+
+        #expect(announced == ["Me ayudas a setupear esto? https://thinkingmachines.ai/inkling-2-mini"])
+        #expect(session.title == "Configurar Inkling 2 mini")
+
+        let (resumed, _) = try fakeSession(title: "Login bug")
+        defer { resumed.stop() }
+        resumed.onFirstMessage = { announced.append($0) }
+        resumed.send("Keep going")
+        #expect(announced.count == 1)
+    }
+
+    @Test func takesMessagesWhileClaudeWorks() async throws {
+        let (session, log) = try fakeSession()
         defer { session.stop() }
 
         session.send("Fix the build")

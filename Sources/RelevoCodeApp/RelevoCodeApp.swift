@@ -45,6 +45,8 @@ final class AppModel {
     @ObservationIgnored var openWindow: ((String) -> Void)?
     @ObservationIgnored var isActive: () -> Bool = { NSApp?.isActive ?? false }
     @ObservationIgnored var activate: () -> Void = { NSApp?.activate() }
+    @ObservationIgnored var titleMaker: ((String, ClaudeAccount) async -> String?)?
+    private(set) var titles: [String: String]
 
     let notifier: any Notifier
     private let defaults: UserDefaults
@@ -60,6 +62,7 @@ final class AppModel {
             .mapValues(Date.init(timeIntervalSince1970:))
         assigned = (defaults.dictionary(forKey: "sessionAccounts") as? [String: String]) ?? [:]
         themes = ((defaults.dictionary(forKey: "accountThemes") as? [String: String]) ?? [:]).compactMapValues(AccountTheme.init)
+        titles = (defaults.dictionary(forKey: "sessionTitles") as? [String: String]) ?? [:]
         notifier.onOpen = { [weak self] in self?.reveal($0) }
     }
 
@@ -320,7 +323,7 @@ final class AppModel {
         )
         let session = Session(
             configuration: configuration, accountName: name(of: account), environment: environment ?? [:], executable: executable,
-            title: past.title, dormant: true
+            title: title(of: past), dormant: true
         )
         show(session)
         Task {
@@ -374,6 +377,9 @@ final class AppModel {
         monitors.removeValue(forKey: session.id)?.stop()
         if session.status != .dormant, let id = session.sessionID {
             assign(id, to: owner(of: session))
+            if titles[id] == nil, let title = session.customTitle {
+                remember(title, for: id)
+            }
         }
         sessions.removeAll { $0.id == session.id }
     }
@@ -383,6 +389,40 @@ final class AppModel {
             guard let self, let session else { return }
             self.notice(moment, from: session)
         }
+        session.onFirstMessage = { [weak self, weak session] text in
+            guard let self, let session else { return }
+            Task { await self.name(session, from: text) }
+        }
+    }
+
+    func name(_ session: Session, from text: String) async {
+        let account = owner(of: session)
+        let title: String?
+        if let titleMaker {
+            title = await titleMaker(text, account)
+        } else if let executable, let environment {
+            let folder = (FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory)
+                .appending(path: Bundle.main.bundleIdentifier ?? "relevo-code").appending(path: "titles")
+            title = await SessionTitle.generate(
+                for: text, configDirectory: account.configDirectory, environment: environment, executable: executable, folder: folder
+            )
+        } else {
+            title = nil
+        }
+        guard let title else { return }
+        session.rename(title)
+        if let id = session.sessionID {
+            remember(title, for: id)
+        }
+    }
+
+    func title(of past: PastSession) -> String {
+        titles[past.id] ?? past.title
+    }
+
+    private func remember(_ title: String, for sessionID: String) {
+        titles[sessionID] = title
+        defaults.set(titles, forKey: "sessionTitles")
     }
 
     private func show(_ session: Session) {
@@ -527,7 +567,7 @@ struct SidebarView: View {
                 let recent = window.visibleRecent
                 ForEach(recent.prefix(Self.recentLimit)) { past in
                     SidebarRow(pullRequests: model.pullRequests(of: past), attention: model.attention(of: past)) {
-                        RecentRow(past: past)
+                        RecentRow(past: past, title: model.title(of: past))
                     } actions: {
                         RecentSessionMenu(model: model, window: window, past: past)
                     }
@@ -955,6 +995,7 @@ struct SessionRow: View {
 
 struct RecentRow: View {
     let past: PastSession
+    var title: String?
     var showsRepository = true
 
     private var place: String? {
@@ -963,7 +1004,7 @@ struct RecentRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(verbatim: past.title)
+            Text(verbatim: title ?? past.title)
                 .lineLimit(1)
             HStack(spacing: 4) {
                 if let place {
@@ -978,7 +1019,7 @@ struct RecentRow: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .help(Text(verbatim: "\(past.title)\n\(past.directory.path)"))
+        .help(Text(verbatim: "\(title ?? past.title)\n\(past.directory.path)"))
     }
 }
 
@@ -991,7 +1032,7 @@ struct AllSessionsView: View {
     private var groups: [(name: String, sessions: [PastSession])] {
         let matching = window.visibleRecent.filter { past in
             query.isEmpty
-                || past.title.localizedCaseInsensitiveContains(query)
+                || model.title(of: past).localizedCaseInsensitiveContains(query)
                 || past.projectName.localizedCaseInsensitiveContains(query)
         }
         let grouped = Dictionary(grouping: matching, by: \.repositoryName)
@@ -1011,7 +1052,7 @@ struct AllSessionsView: View {
                                 dismiss()
                             } label: {
                                 HStack(spacing: 6) {
-                                    RecentRow(past: past, showsRepository: false)
+                                    RecentRow(past: past, title: model.title(of: past), showsRepository: false)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                     if let pullRequests = model.pullRequests(of: past) {
                                         PullRequestIcon(badge: pullRequests)

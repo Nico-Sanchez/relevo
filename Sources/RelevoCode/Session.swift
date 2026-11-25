@@ -88,6 +88,7 @@ public final class Session: Identifiable {
     public private(set) var steering: Set<String> = []
     public private(set) var backgroundTasks: [RunningTask] = []
     @ObservationIgnored public var onMoment: ((Moment) -> Void)?
+    @ObservationIgnored public var onFirstMessage: ((String) -> Void)?
 
     private let environment: [String: String]
     private let executable: URL?
@@ -124,10 +125,14 @@ public final class Session: Identifiable {
         }
         for item in items {
             if case .user(let text) = item.kind {
-                return String(text.prefix(60))
+                return SessionTitle.fallback(from: text)
             }
         }
         return workingDirectory.lastPathComponent
+    }
+
+    public func rename(_ title: String) {
+        customTitle = title
     }
 
     public var lastReply: String? {
@@ -269,7 +274,11 @@ public final class Session: Identifiable {
             start()
         }
         guard let process else { return }
+        let first = customTitle == nil && !items.contains { if case .user = $0.kind { true } else { false } }
         let index = append(.user(text))
+        if first {
+            onFirstMessage?(text)
+        }
         if isBusy {
             steering.insert(items[index].id)
         } else {

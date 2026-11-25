@@ -190,12 +190,13 @@ public enum SessionLibrary {
                 break
             }
         }
-        guard let directory, let label = title ?? firstPrompt else { return nil }
+        let named = title.map { String($0.split(whereSeparator: \.isNewline).first ?? "").trimmingCharacters(in: .whitespaces) }
+        guard let directory, let label = named ?? firstPrompt.map(SessionTitle.fallback) else { return nil }
         return PastSession(
             id: file.deletingPathExtension().lastPathComponent,
             file: file,
             directory: URL(filePath: directory),
-            title: String(label.split(whereSeparator: \.isNewline).first ?? "").trimmingCharacters(in: .whitespaces),
+            title: label,
             lastActivity: lastActivity,
             branch: branch,
             awaitsAnswer: lastMessage.map(asksTheUser) ?? false
