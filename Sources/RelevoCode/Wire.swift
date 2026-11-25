@@ -79,6 +79,18 @@ public struct Question: Sendable, Equatable {
     }
 }
 
+public struct RunningTask: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let description: String
+    public let kind: String?
+
+    public init(id: String, description: String, kind: String?) {
+        self.id = id
+        self.description = description
+        self.kind = kind
+    }
+}
+
 public struct DiffHunk: Sendable, Equatable {
     public let oldStart: Int
     public let newStart: Int
@@ -116,6 +128,7 @@ public enum Incoming: Sendable, Equatable {
     case toolResult(toolUseID: String, content: String, isError: Bool, patch: [DiffHunk])
     case permissionRequest(PermissionRequest)
     case usage([UsageWindow])
+    case backgroundTasks([RunningTask])
     case result(TurnResult)
     case exited(status: Int32, message: String)
     case ignored
@@ -206,6 +219,11 @@ public enum Wire {
             return .status(message["status"]?.string)
         case "task_summary":
             return .taskSummary(message["detail"]?.string)
+        case "background_tasks_changed":
+            return .backgroundTasks((message["tasks"]?.array ?? []).compactMap { task in
+                guard let id = task["task_id"]?.string else { return nil }
+                return RunningTask(id: id, description: task["description"]?.string ?? id, kind: task["task_type"]?.string)
+            })
         default:
             return .ignored
         }

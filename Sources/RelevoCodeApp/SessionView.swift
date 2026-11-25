@@ -14,6 +14,9 @@ struct SessionView: View {
         VStack(spacing: 0) {
             Transcript(session: session)
             VStack(spacing: 8) {
+                if !session.backgroundTasks.isEmpty {
+                    BackgroundTasksView(tasks: session.backgroundTasks)
+                }
                 if let request = session.pendingPermissions.first {
                     if let questions = request.questions {
                         QuestionCard(request: request, questions: questions, session: session)
@@ -443,6 +446,33 @@ struct PermissionCard: View {
         .padding(14)
         .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.orange.opacity(0.4)))
+    }
+}
+
+struct BackgroundTasksView: View {
+    let tasks: [RunningTask]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(tasks) { task in
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.mini)
+                    Text("In the background")
+                        .foregroundStyle(.secondary)
+                        .fixedSize()
+                    Text(verbatim: task.description)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+        .help("Claude picks up where it left off when this finishes")
     }
 }
 

@@ -159,6 +159,24 @@ struct LiveSessionTests {
         #expect(lastReply(session)?.contains("SECOND") == true)
     }
 
+    @Test func picksUpWhenABackgroundCommandFinishes() async throws {
+        let (folder, token) = try makeFolder()
+        defer { cleanUp(folder, token: token) }
+        let session = try session(SessionConfiguration(directory: folder, configDirectory: account, model: "haiku", permissionMode: "acceptEdits"))
+        defer { session.stop() }
+        session.start()
+        try await waitUntil { session.status == .idle }
+
+        session.send("Run `sleep 6 && echo bg-done` with the Bash tool in the background (run_in_background: true). Do not wait for it: reply with exactly STARTED right away. When it finishes, reply with exactly BG-DONE.")
+        try await waitUntil {
+            if let request = session.pendingPermissions.first {
+                session.respond(request, .allow)
+            }
+            return !session.backgroundTasks.isEmpty
+        }
+        try await waitUntil { session.backgroundTasks.isEmpty && session.status == .idle && lastReply(session)?.contains("BG-DONE") == true }
+    }
+
     @Test func changesModelEffortAndModeWhileRunning() async throws {
         let (folder, token) = try makeFolder()
         defer { cleanUp(folder, token: token) }

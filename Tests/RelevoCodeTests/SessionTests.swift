@@ -148,6 +148,31 @@ import Testing
         #expect(!session.acceptsMessages)
     }
 
+    @Test func followsBackgroundTasksAndTheTurnsTheyStart() {
+        let session = makeSession()
+        var moments: [Session.Moment] = []
+        session.onMoment = { moments.append($0) }
+        let task = RunningTask(id: "b1", description: "Pull inkling-2-mini", kind: "local_bash")
+        session.apply(.sessionStarted(sessionID: "s1", model: nil, permissionMode: nil, directory: nil))
+        session.apply(.backgroundTasks([task]))
+        session.apply(.result(TurnResult(isError: false, text: "started", costUSD: nil, durationMS: nil)))
+        #expect(session.status == .idle)
+        #expect(session.backgroundTasks == [task])
+
+        session.apply(.backgroundTasks([]))
+        session.apply(.sessionStarted(sessionID: "s1", model: nil, permissionMode: nil, directory: nil))
+        #expect(session.status == .working)
+        session.append(.assistant("The model is ready."))
+        session.apply(.result(TurnResult(isError: false, text: "done", costUSD: nil, durationMS: nil)))
+
+        #expect(session.status == .idle)
+        #expect(moments == [.finished(nil), .finished("The model is ready.")])
+
+        session.apply(.backgroundTasks([task]))
+        session.apply(.exited(status: 0, message: ""))
+        #expect(session.backgroundTasks.isEmpty)
+    }
+
     @Test func remembersWhenTheLastTurnEnded() {
         let session = makeSession()
         session.apply(.status("requesting"))

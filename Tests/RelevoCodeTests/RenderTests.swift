@@ -340,6 +340,10 @@ struct ResizeRenderTests {
         session.apply(.status("requesting"))
         let view = VStack(spacing: 10) {
             ItemView(item: TranscriptItem(id: "u1", kind: .user("Also update the changelog when you're done.")), directory: session.workingDirectory, steering: true)
+            BackgroundTasksView(tasks: [
+                RunningTask(id: "b1", description: "Pull inkling-2-mini (about 20 GB)", kind: "local_bash"),
+                RunningTask(id: "b2", description: "Run the e2e suite", kind: "local_bash"),
+            ])
             Composer(session: session, draft: .constant(""))
             Composer(session: session, draft: .constant("Use the staging database"))
         }

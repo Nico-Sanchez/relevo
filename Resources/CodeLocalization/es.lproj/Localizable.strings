@@ -39,6 +39,7 @@
 "Claude Code refused it." = "Claude Code lo rechazó.";
 "Claude has %lld questions" = "Claude tiene %lld preguntas";
 "Claude has a question" = "Claude tiene una pregunta";
+"Claude picks up where it left off when this finishes" = "Claude sigue donde quedó cuando esto termine";
 "Claude reads this at its next step" = "Claude lo lee en su próximo paso";
 "Close" = "Cerrar";
 "Close Session" = "Cerrar la sesión";
@@ -63,6 +64,7 @@
 "Graphite" = "Grafito";
 "Green" = "Verde";
 "High effort" = "Esfuerzo alto";
+"In the background" = "En segundo plano";
 "its base" = "su base";
 "Keeps the original untouched and continues in a new session. Use it when Claude Desktop or another account still has it open." = "Deja la original como está y sigue en una sesión nueva. Usalo cuando Claude Desktop u otra cuenta todavía la tiene abierta.";
 "Low effort" = "Esfuerzo bajo";
@@ -114,6 +116,7 @@
 "Send a message to continue this session…" = "Mandá un mensaje para retomar esta sesión…";
 "Show changes and the pull request" = "Mostrar los cambios y el pull request";
 "Skip" = "Omitir";
+"Something is still running in the background" = "Algo sigue corriendo en segundo plano";
 "Start" = "Empezar";
 "Start a new session, or pick a recent one to continue it." = "Empezá una sesión nueva o elegí una reciente para retomarla.";
 "Starting Claude Code" = "Iniciando Claude Code";

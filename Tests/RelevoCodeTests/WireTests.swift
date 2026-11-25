@@ -149,6 +149,15 @@ let toolResultLine = #"""
         #expect(multiple.answer(choosing: ["Tue"], other: "Fri") == "Tue, Fri")
     }
 
+    @Test func readsTheTasksRunningInTheBackground() {
+        let line = #"""
+        {"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"b8vcg0v0h","run_id":"r1","task_type":"local_bash","description":"Pull inkling-2-mini"},{"run_id":"r2"}]}
+        """#
+
+        #expect(event(line) == .backgroundTasks([RunningTask(id: "b8vcg0v0h", description: "Pull inkling-2-mini", kind: "local_bash")]))
+        #expect(event(#"{"type":"system","subtype":"background_tasks_changed","tasks":[]}"#) == .backgroundTasks([]))
+    }
+
     @Test func buildsTheCommandLineForEachSession() {
         let directory = URL(filePath: "/tmp/project")
         let plain = SessionConfiguration(directory: directory)

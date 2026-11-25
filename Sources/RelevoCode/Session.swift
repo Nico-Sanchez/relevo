@@ -86,6 +86,7 @@ public final class Session: Identifiable {
     public private(set) var effort: String?
     public private(set) var lastTurnEnded: Date?
     public private(set) var steering: Set<String> = []
+    public private(set) var backgroundTasks: [RunningTask] = []
     @ObservationIgnored public var onMoment: ((Moment) -> Void)?
 
     private let environment: [String: String]
@@ -337,6 +338,9 @@ public final class Session: Identifiable {
                 }
             }
         case .sessionStarted(let id, let model, let mode, let directory):
+            if status == .idle {
+                status = .working
+            }
             sessionID = id
             self.model = model ?? self.model
             if let mode {
@@ -394,6 +398,8 @@ public final class Session: Identifiable {
             onMoment?(.needsYou(request))
         case .usage(let windows):
             usage = windows
+        case .backgroundTasks(let tasks):
+            backgroundTasks = tasks
         case .result(let result):
             status = .idle
             lastTurnEnded = .now
@@ -408,6 +414,7 @@ public final class Session: Identifiable {
         case .exited(let code, let message):
             pendingPermissions = []
             steering = []
+            backgroundTasks = []
             activity = nil
             isThinking = false
             lastTurnEnded = .now

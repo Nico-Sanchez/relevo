@@ -512,7 +512,8 @@ struct SidebarView: View {
                         SidebarRow(
                             pullRequests: model.pullRequests(of: session),
                             attention: model.attention(of: session),
-                            working: session.status == .working || session.status == .starting
+                            working: session.status == .working || session.status == .starting,
+                            background: !session.backgroundTasks.isEmpty
                         ) {
                             SessionRow(session: session)
                         } actions: {
@@ -791,17 +792,19 @@ struct SidebarRow<Content: View, Actions: View>: View {
     let pullRequests: PullRequestBadge?
     let attention: Attention?
     let working: Bool
+    let background: Bool
     let content: Content
     let actions: Actions
     @State private var hovering = false
 
     init(
-        pullRequests: PullRequestBadge?, attention: Attention?, working: Bool = false,
+        pullRequests: PullRequestBadge?, attention: Attention?, working: Bool = false, background: Bool = false,
         @ViewBuilder content: () -> Content, @ViewBuilder actions: () -> Actions
     ) {
         self.pullRequests = pullRequests
         self.attention = attention
         self.working = working
+        self.background = background
         self.content = content()
         self.actions = actions()
     }
@@ -824,7 +827,7 @@ struct SidebarRow<Content: View, Actions: View>: View {
                     .menuIndicator(.hidden)
                     .fixedSize()
                 } else {
-                    StatusDot(attention: attention, working: working)
+                    StatusDot(attention: attention, working: working, background: background)
                 }
             }
             .frame(width: 18)
@@ -842,6 +845,7 @@ struct StatusDot: View {
 
     let attention: Attention?
     var working = false
+    var background = false
 
     var body: some View {
         if attention == .waiting {
@@ -853,6 +857,11 @@ struct StatusDot: View {
         } else if attention == .unread {
             Circle().fill(Self.unread).frame(width: 8, height: 8)
                 .help("Unread")
+        } else if background {
+            Image(systemName: "hourglass")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help("Something is still running in the background")
         }
     }
 }
