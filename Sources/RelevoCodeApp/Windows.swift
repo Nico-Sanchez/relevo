@@ -16,6 +16,7 @@ final class WindowModel {
     var showingNewSession = false
     private(set) var accountID: String
     @ObservationIgnored weak var nsWindow: NSWindow?
+    @ObservationIgnored var quoteSelection: (() -> Void)?
 
     init(app: AppModel, accountID: String?) {
         self.app = app
@@ -170,6 +171,11 @@ struct WindowCommands: Commands {
                 .disabled(window == nil || model.executable == nil)
             Button("New Window") { openWindow(id: WindowRoot.id) }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+        }
+        CommandGroup(after: .pasteboard) {
+            Button("Quote Selection") { window?.quoteSelection?() }
+                .keyboardShortcut("'", modifiers: [.command, .shift])
+                .disabled(window == nil)
         }
         CommandMenu("Account") {
             ForEach(Array(model.accounts.enumerated()), id: \.element.id) { index, account in

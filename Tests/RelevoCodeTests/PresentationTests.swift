@@ -109,6 +109,22 @@ import Testing
         ])
     }
 
+    @Test func quotesTextIntoTheDraft() {
+        #expect(Quote.insert("Ollama 0.40.18\n\nruns as a service", into: "") == "> Ollama 0.40.18\n>\n> runs as a service\n\n")
+        #expect(Quote.insert("  20 GB ", into: "Why so big?\n") == "Why so big?\n\n> 20 GB\n\n")
+    }
+
+    @Test func splitsAMessageIntoQuotedAndOwnParts() {
+        let message = "> Ollama 0.40.18\n>runs as a service\n\nWhy does it start at login?\n> 20 GB\nToo big"
+        #expect(Quote.parts(of: message) == [
+            MessagePart(quoted: true, text: "Ollama 0.40.18\nruns as a service"),
+            MessagePart(quoted: false, text: "Why does it start at login?"),
+            MessagePart(quoted: true, text: "20 GB"),
+            MessagePart(quoted: false, text: "Too big"),
+        ])
+        #expect(Quote.parts(of: "No quotes here") == [MessagePart(quoted: false, text: "No quotes here")])
+    }
+
     @Test func readsTablesQuotesAndRules() {
         let text = """
             | Model | Size |

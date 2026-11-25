@@ -107,6 +107,9 @@
 "pr.state.open" = "Abierto";
 "Pull Request" = "Pull request";
 "Purple" = "Violeta";
+"Quote" = "Citar";
+"Quote Selection" = "Citar selección";
+"Quote the selected text in your message" = "Citar el texto seleccionado en tu mensaje";
 "Recent" = "Recientes";
 "Refresh" = "Actualizar";
 "Relevo Code" = "Relevo Code";

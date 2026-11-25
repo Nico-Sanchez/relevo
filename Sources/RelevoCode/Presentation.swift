@@ -182,3 +182,36 @@ public enum MarkdownBlock: Equatable, Sendable {
         return .table(header: rows[0], rows: Array(rows.dropFirst(2)))
     }
 }
+
+public struct MessagePart: Equatable, Sendable {
+    public let quoted: Bool
+    public let text: String
+}
+
+public enum Quote {
+    public static func insert(_ text: String, into draft: String) -> String {
+        let quoted = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.isEmpty ? ">" : "> \($0)" }
+            .joined(separator: "\n")
+        let current = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (current.isEmpty ? "" : current + "\n\n") + quoted + "\n\n"
+    }
+
+    public static func parts(of message: String) -> [MessagePart] {
+        var parts: [MessagePart] = []
+        for line in message.split(separator: "\n", omittingEmptySubsequences: false) {
+            let quoted = line.hasPrefix(">")
+            let text = quoted ? String(line.dropFirst().drop { $0 == " " }) : String(line)
+            if let last = parts.last, last.quoted == quoted {
+                parts[parts.count - 1] = MessagePart(quoted: quoted, text: last.text + "\n" + text)
+            } else {
+                parts.append(MessagePart(quoted: quoted, text: text))
+            }
+        }
+        return parts.compactMap { part in
+            let text = part.text.trimmingCharacters(in: .newlines)
+            return text.isEmpty ? nil : MessagePart(quoted: part.quoted, text: text)
+        }
+    }
+}

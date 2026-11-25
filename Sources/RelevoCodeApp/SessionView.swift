@@ -9,10 +9,13 @@ struct SessionView: View {
     @State private var draft = ""
     @AppStorage("showingSidePane") private var showingSidePane = true
     @State private var isRepository = true
+    @State private var watcher = SelectionWatcher()
+    @State private var focusRequest = 0
 
     var body: some View {
         VStack(spacing: 0) {
             Transcript(session: session)
+                .overlay { QuoteButton(watcher: watcher, quote: quote) }
             VStack(spacing: 8) {
                 if !session.backgroundTasks.isEmpty {
                     BackgroundTasksView(tasks: session.backgroundTasks)
@@ -31,7 +34,7 @@ struct SessionView: View {
                 if case .ended(let reason) = session.status {
                     EndedBanner(reason: reason)
                 } else {
-                    Composer(session: session, draft: $draft)
+                    Composer(session: session, draft: $draft, focusRequest: focusRequest)
                 }
             }
             .frame(maxWidth: 780)
@@ -42,6 +45,18 @@ struct SessionView: View {
         .inspector(isPresented: Binding(get: { showingSidePane && isRepository }, set: { showingSidePane = $0 })) {
             SidePane(session: session, monitor: model.monitors[session.id], environment: model.environment ?? [:])
                 .inspectorColumnWidth(min: 280, ideal: 360, max: 640)
+        }
+        .onAppear {
+            watcher.start { window.nsWindow }
+            window.quoteSelection = {
+                if let text = SelectionWatcher.selectedText(in: window.nsWindow) {
+                    quote(text)
+                }
+            }
+        }
+        .onDisappear {
+            watcher.stop()
+            window.quoteSelection = nil
         }
         .task(id: session.workingDirectory) {
             let directory = session.workingDirectory
@@ -83,6 +98,14 @@ struct SessionView: View {
                 }
             }
         }
+    }
+}
+
+extension SessionView {
+    func quote(_ text: String) {
+        window.nsWindow?.makeFirstResponder(nil)
+        draft = Quote.insert(text, into: draft)
+        focusRequest += 1
     }
 }
 
@@ -131,7 +154,7 @@ struct ItemView: View {
         switch item.kind {
         case .user(let text):
             VStack(alignment: .trailing, spacing: 4) {
-                Text(text)
+                QuotedText(text: text)
                     .textSelection(.enabled)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
@@ -628,6 +651,7 @@ struct OptionRow: View {
 struct Composer: View {
     let session: Session
     @Binding var draft: String
+    var focusRequest = 0
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -680,6 +704,7 @@ struct Composer: View {
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.separator))
         .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
         .onAppear { focused = true }
+        .onChange(of: focusRequest) { focused = true }
     }
 
     private var placeholder: String {
