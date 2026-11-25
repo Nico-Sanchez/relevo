@@ -64,19 +64,44 @@ public enum MarkdownBlock: Equatable, Sendable {
     case heading(level: Int, text: String)
     case paragraph(String)
     case code(language: String?, text: String)
+    case list([ListItem])
+    case quote(String)
+    case table(header: [String], rows: [[String]])
+    case rule
+
+    public struct ListItem: Equatable, Sendable {
+        public let marker: String
+        public let level: Int
+        public var text: String
+    }
 
     public static func parse(_ text: String) -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
         var paragraph: [Substring] = []
+        var items: [ListItem] = []
+        var quote: [String] = []
+        var table: [String] = []
         var code: [Substring]?
         var language: String?
 
-        func flushParagraph() {
+        func flush() {
             let joined = paragraph.joined(separator: "\n").trimmingCharacters(in: .newlines)
             if !joined.isEmpty {
                 blocks.append(.paragraph(joined))
             }
+            if !items.isEmpty {
+                blocks.append(.list(items))
+            }
+            if !quote.isEmpty {
+                blocks.append(.quote(quote.joined(separator: "\n")))
+            }
+            if !table.isEmpty {
+                blocks.append(tableBlock(table))
+            }
             paragraph = []
+            items = []
+            quote = []
+            table = []
         }
 
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -86,26 +111,68 @@ public enum MarkdownBlock: Equatable, Sendable {
                     blocks.append(.code(language: language, text: lines.joined(separator: "\n")))
                     code = nil
                 } else {
-                    flushParagraph()
+                    flush()
                     let tag = trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces)
                     language = tag.isEmpty ? nil : tag
                     code = []
                 }
             } else if code != nil {
                 code?.append(line)
-            } else if let match = trimmed.wholeMatch(of: /(#{1,6})\s+(.+)/) {
-                flushParagraph()
-                blocks.append(.heading(level: match.1.count, text: String(match.2)))
             } else if trimmed.isEmpty {
-                flushParagraph()
+                flush()
+            } else if let match = trimmed.wholeMatch(of: /(#{1,6})\s+(.+)/) {
+                flush()
+                blocks.append(.heading(level: match.1.count, text: String(match.2)))
+            } else if trimmed.wholeMatch(of: /(-{3,}|\*{3,}|_{3,})/) != nil, paragraph.isEmpty {
+                flush()
+                blocks.append(.rule)
+            } else if trimmed.hasPrefix("|") {
+                if table.isEmpty {
+                    flush()
+                }
+                table.append(trimmed)
+            } else if trimmed.hasPrefix(">") {
+                if quote.isEmpty {
+                    flush()
+                }
+                quote.append(trimmed.dropFirst().trimmingCharacters(in: .whitespaces))
+            } else if let item = listItem(line) {
+                if items.isEmpty {
+                    flush()
+                }
+                items.append(item)
+            } else if !items.isEmpty {
+                items[items.count - 1].text += "\n" + trimmed
+            } else if !quote.isEmpty {
+                quote.append(trimmed)
             } else {
+                if !table.isEmpty {
+                    flush()
+                }
                 paragraph.append(line)
             }
         }
         if let lines = code {
             blocks.append(.code(language: language, text: lines.joined(separator: "\n")))
         }
-        flushParagraph()
+        flush()
         return blocks
+    }
+
+    private static func listItem(_ line: Substring) -> ListItem? {
+        guard let match = line.wholeMatch(of: /( *)([-*+]|(\d{1,9})[.)])\s+(.*)/) else { return nil }
+        let level = match.1.count / 2
+        let marker = match.3.map { "\($0)." } ?? (level == 0 ? "•" : "◦")
+        return ListItem(marker: marker, level: level, text: String(match.4))
+    }
+
+    private static func tableBlock(_ lines: [String]) -> MarkdownBlock {
+        let rows = lines.map { line in
+            line.trimmingCharacters(in: CharacterSet(charactersIn: "| ")).split(separator: "|", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+        }
+        let separator = rows.count > 1 && rows[1].allSatisfy { $0.wholeMatch(of: /:?-+:?/) != nil }
+        guard separator else { return .paragraph(lines.joined(separator: "\n")) }
+        return .table(header: rows[0], rows: Array(rows.dropFirst(2)))
     }
 }

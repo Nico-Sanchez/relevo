@@ -173,6 +173,52 @@ struct MarkdownView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                case .list(let items):
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(verbatim: item.marker)
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                                    .frame(minWidth: 14, alignment: .trailing)
+                                Text(Self.inline(item.text))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(.leading, CGFloat(item.level) * 20)
+                        }
+                    }
+                case .quote(let text):
+                    HStack(spacing: 10) {
+                        RoundedRectangle(cornerRadius: 1.5)
+                            .fill(.tertiary)
+                            .frame(width: 3)
+                        Text(Self.inline(text))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                case .table(let header, let rows):
+                    ScrollView(.horizontal) {
+                        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                            GridRow {
+                                ForEach(Array(header.enumerated()), id: \.offset) { _, cell in
+                                    Text(Self.inline(cell)).fontWeight(.semibold)
+                                }
+                            }
+                            Divider()
+                            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                                GridRow {
+                                    ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                                        Text(Self.inline(cell))
+                                    }
+                                }
+                            }
+                        }
+                        .padding(10)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+                case .rule:
+                    Divider()
                 }
             }
         }

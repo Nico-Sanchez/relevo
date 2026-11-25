@@ -53,9 +53,55 @@ import Testing
 
         #expect(MarkdownBlock.parse(text) == [
             .heading(level: 1, text: "Plan"),
-            .paragraph("First line\n- item one\n- item two"),
+            .paragraph("First line"),
+            .list([.init(marker: "•", level: 0, text: "item one"), .init(marker: "•", level: 0, text: "item two")]),
             .code(language: "swift", text: "let x = 1\n\nprint(x)"),
             .paragraph("Done"),
+        ])
+    }
+
+    @Test func readsNestedOrderedAndContinuedListItems() {
+        let text = """
+            1. Install Ollama
+            2. Pull the model
+              - about 20 GB
+              * with tools and vision
+            continues the item above
+            + **bold** item
+
+            After the list
+            """
+
+        #expect(MarkdownBlock.parse(text) == [
+            .list([
+                .init(marker: "1.", level: 0, text: "Install Ollama"),
+                .init(marker: "2.", level: 0, text: "Pull the model"),
+                .init(marker: "◦", level: 1, text: "about 20 GB"),
+                .init(marker: "◦", level: 1, text: "with tools and vision\ncontinues the item above"),
+                .init(marker: "•", level: 0, text: "**bold** item"),
+            ]),
+            .paragraph("After the list"),
+        ])
+    }
+
+    @Test func readsTablesQuotesAndRules() {
+        let text = """
+            | Model | Size |
+            |:------|-----:|
+            | Mini | 20 GB |
+            | Max | 80 GB |
+            > Support for looped models
+            is new.
+
+            ---
+            | not | a table |
+            """
+
+        #expect(MarkdownBlock.parse(text) == [
+            .table(header: ["Model", "Size"], rows: [["Mini", "20 GB"], ["Max", "80 GB"]]),
+            .quote("Support for looped models\nis new."),
+            .rule,
+            .paragraph("| not | a table |"),
         ])
     }
 

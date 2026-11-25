@@ -359,6 +359,41 @@ struct ResizeRenderTests {
         window.close()
     }
 
+    @Test func rendersRichMarkdown() async throws {
+        _ = NSApplication.shared
+        let text = """
+            ### (5) Agentic coding
+            HF and Tinker describe it as **general-purpose** models:
+            - Context window: up to 1M tokens
+            - Chat template: `chat_template.jinja`
+              - 6.87 kB, not read yet
+            1. Install Ollama
+            2. Pull `inkling-2-mini`
+
+            | Runtime | Tools | Vision |
+            |---|---|---|
+            | Ollama | yes | yes |
+            | mlx-lm | no | no |
+
+            > Support for looped models in local runtimes is new.
+
+            ---
+            Pages read: [model card](https://example.com).
+            """
+        let hosting = NSHostingView(rootView: MarkdownView(text: text).padding(20).frame(width: 620))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.setContentSize(hosting.fittingSize)
+        window.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(500))
+        let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        try #require(bitmap.representation(using: .png, properties: [:]))
+            .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-markdown.png"))
+        window.close()
+    }
+
     @Test func rendersTheAccountList() async throws {
         _ = NSApplication.shared
         let (model, scene) = narrow()
