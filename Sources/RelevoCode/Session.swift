@@ -3,7 +3,7 @@ import Observation
 
 public struct ToolCall: Sendable, Equatable {
     public enum State: Sendable, Equatable {
-        case running, awaitingPermission, done, failed, denied, stopped
+        case running, awaitingPermission, done, failed, blocked, denied, stopped
     }
 
     public let id: String
@@ -45,6 +45,7 @@ public struct TranscriptItem: Sendable, Equatable, Identifiable {
         case tool(ToolCall)
         case notice(Notice)
         case automated(summary: String, text: String)
+        case hook(HookEvent)
     }
 
     public let id: String
@@ -88,6 +89,7 @@ public final class Session: Identifiable {
     public private(set) var steering: Set<String> = []
     public private(set) var backgroundTasks: [RunningTask] = []
     public private(set) var applied: AppliedSettings?
+    public private(set) var runningHook: String?
     @ObservationIgnored public var onReady: ((SessionInfo) -> Void)?
     @ObservationIgnored public var onMoment: ((Moment) -> Void)?
     @ObservationIgnored public var onFirstMessage: ((String) -> Void)?
@@ -102,6 +104,7 @@ public final class Session: Identifiable {
     private var initializeID: String?
     private var settingsID: String?
     private var changes: [String: Notice.Setting] = [:]
+    private var runningHookID: String?
 
     public init(
         configuration: SessionConfiguration, accountName: String,
@@ -165,6 +168,7 @@ public final class Session: Identifiable {
             case .user(let text): append(.user(text))
             case .event(let event): apply(event)
             case .compacted: append(.notice(.compacted))
+            case .automated(let summary, let text): append(.automated(summary: summary, text: text))
             }
         }
         for index in items.indices {
@@ -336,6 +340,13 @@ public final class Session: Identifiable {
 
     func apply(_ event: Incoming) {
         switch event {
+        case .hook, .hookStarted, .hookFinished, .controlResponse, .status, .taskSummary, .usage, .backgroundTasks, .ignored:
+            break
+        default:
+            runningHook = nil
+            runningHookID = nil
+        }
+        switch event {
         case .controlResponse(let requestID, let success, let payload):
             if let what = changes.removeValue(forKey: requestID) {
                 if success {
@@ -404,12 +415,31 @@ public final class Session: Identifiable {
                 }
             }
         case .toolResult(let id, let content, let isError, let patch):
+            let blocked = isError ? Hooks.blockReason(fromToolResult: content) : nil
             updateTool(id) { call in
-                call.result = content
+                call.result = blocked ?? content
                 call.patch = patch
                 if call.state != .denied {
-                    call.state = isError ? .failed : .done
+                    call.state = blocked != nil ? .blocked : isError ? .failed : .done
                 }
+            }
+        case .hook(let hook):
+            if hook.kind == .failed, reportedThisTurn(hook) {
+                break
+            }
+            append(.hook(hook))
+        case .hookStarted(let id, let name):
+            if !name.hasPrefix("PostToolUse") {
+                runningHookID = id
+                runningHook = name
+            }
+        case .hookFinished(let id, let hook):
+            if id == runningHookID {
+                runningHookID = nil
+                runningHook = nil
+            }
+            if let hook {
+                apply(.hook(hook))
             }
         case .permissionRequest(let request):
             pendingPermissions.append(request)
@@ -476,6 +506,17 @@ public final class Session: Identifiable {
             streamingText[messageID, default: []].append(append(.assistant(text)))
         }
         finalizedText[messageID] = done + 1
+    }
+
+    private func reportedThisTurn(_ hook: HookEvent) -> Bool {
+        for item in items.reversed() {
+            switch item.kind {
+            case .user: return false
+            case .hook(let earlier) where earlier == hook: return true
+            default: continue
+            }
+        }
+        return false
     }
 
     private func updateTool(_ id: String, _ change: (inout ToolCall) -> Void) {

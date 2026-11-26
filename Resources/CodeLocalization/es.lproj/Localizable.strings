@@ -5,6 +5,13 @@
 "%lld%% used" = "%lld%% usado";
 "%lld%% used, resets %@" = "%lld%% usado, se renueva %@";
 "5h" = "5 h";
+"A hook blocked your prompt" = "Un hook bloqueó tu prompt";
+"A hook failed" = "Falló un hook";
+"A hook re-prompted Claude" = "Un hook volvió a solicitar a Claude";
+"A hook requires confirmation for this command" = "Un hook requiere confirmación para este comando";
+"A hook requires confirmation for this edit" = "Un hook requiere confirmación para esta edición";
+"A hook requires confirmation for this tool" = "Un hook requiere confirmación para esta herramienta";
+"A hook sent feedback to Claude" = "Un hook le mandó comentarios a Claude";
 "Accept edits" = "Aceptar ediciones";
 "Account" = "Cuenta";
 "Add" = "Agregar";
@@ -22,6 +29,8 @@
 "Auto-fix" = "Auto-fix";
 "Back to the effort in your settings" = "Volver al esfuerzo de tu configuración";
 "Binary file" = "Archivo binario";
+"Blocked by a hook" = "Bloqueado por un hook";
+"Blocked by a hook: %@" = "Bloqueado por un hook: %@";
 "Blue" = "Azul";
 "Branch" = "Branch";
 "Bypass permissions" = "Omitir permisos";
@@ -64,6 +73,7 @@
 "Effort" = "Esfuerzo";
 "Extra" = "Extra";
 "Finished its turn" = "Terminó su turno";
+"Fix the hook, then send your message again." = "Corregí el hook y volvé a enviar tu mensaje.";
 "Folder" = "Carpeta";
 "gh exited with status %lld." = "gh terminó con estado %lld.";
 "Graphite" = "Grafito";
@@ -128,6 +138,7 @@
 "Relevo Code" = "Relevo Code";
 "Renamed without changes" = "Renombrado sin cambios";
 "Review feedback" = "Feedback de review";
+"Running the %@ hook" = "Ejecutando el hook %@";
 "Scope" = "Alcance";
 "Search sessions" = "Buscar sesiones";
 "Searched files" = "Buscó archivos";
@@ -148,6 +159,8 @@
 "Switch account" = "Cambiar de cuenta";
 "Teal" = "Turquesa";
 "Tell Claude something while it works…" = "Decile algo a Claude mientras trabaja…";
+"The %@ hook failed" = "Falló el hook %@";
+"The %@ hook sent feedback to Claude" = "El hook %@ le mandó comentarios a Claude";
 "The turn ended with an error." = "El turno terminó con un error.";
 "The working tree is clean." = "No hay cambios sin commitear.";
 "Thinking" = "Pensando";

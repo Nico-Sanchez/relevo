@@ -308,7 +308,7 @@ public enum ToolActivity: Equatable, Sendable {
 
     public static func state(of calls: [ToolCall]) -> ToolCall.State {
         let states = calls.map(\.state)
-        for state in [ToolCall.State.awaitingPermission, .running, .failed, .denied, .stopped] where states.contains(state) {
+        for state in [ToolCall.State.awaitingPermission, .running, .failed, .blocked, .denied, .stopped] where states.contains(state) {
             return state
         }
         return .done

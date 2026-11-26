@@ -337,6 +337,67 @@ struct ResizeRenderTests {
         }
     }
 
+    @Test func rendersWhatHooksDo() async throws {
+        _ = NSApplication.shared
+        let model = AppModel()
+        let session = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")), accountName: "ana@example.com", title: "Open the PR")
+        session.loadHistory([
+            .event(.hook(HookEvent(kind: .failed, hook: "SessionStart:startup", text: "security-guidance: no working Python 3 interpreter found."))),
+            .user("my token is sk-123, push it"),
+            .event(.hook(HookEvent(kind: .blockedPrompt, hook: "UserPromptSubmit", text: "Prompts with secrets are not allowed"))),
+            .user("Open the PR for the retry fix."),
+            .event(.assistant(messageID: "m1", blocks: [.toolUse(id: "t1", name: "Bash", input: .object(["command": .string("gh pr create --title \"Retry uploads\"")]))])),
+            .event(.toolResult(toolUseID: "t1", content: "PreToolUse:Bash hook error: [/Users/ana/.claude/hub/bin/hub.py]: hub: este PR no cierra ningún issue. Agregá `Closes #N` al body y volvé a crearlo.", isError: true, patch: [])),
+            .event(.assistant(messageID: "m2", blocks: [.toolUse(id: "t2", name: "Bash", input: .object(["command": .string("gh pr create --title \"Retry uploads\" --body \"Closes #4913\"")]))])),
+            .event(.toolResult(toolUseID: "t2", content: "https://github.com/acme/vertex/pull/4920", isError: false, patch: [])),
+            .event(.hook(HookEvent(kind: .message, hook: "PostToolUse:Bash", text: "hub: #4913 (In progress → In review)"))),
+            .event(.assistant(messageID: "m3", blocks: [.text("Opened #4920, linked to #4913.")])),
+            .event(.hook(HookEvent(kind: .reprompted, hook: "Stop", text: "Before finishing, run the test suite."))),
+            .automated(summary: "Background security review found: token in config.py", text: "Security Review: hardcoded token in config.py line 12."),
+        ])
+        session.apply(.status("requesting"))
+        session.apply(.hookStarted(id: "h1", name: "Stop"))
+        model.sessions = [session]
+        let scene = WindowModel(app: model, accountID: nil)
+        scene.selection = .open(session.id)
+        UserDefaults.standard.set(false, forKey: "showingSidePane")
+        defer { UserDefaults.standard.set(true, forKey: "showingSidePane") }
+
+        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            let hosting = NSHostingView(rootView: ContentView(model: model, window: scene))
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 860), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: appearance)
+            window.contentView = hosting
+            window.orderFrontRegardless()
+            try await Task.sleep(for: .milliseconds(900))
+            let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+            hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+            try #require(bitmap.representation(using: .png, properties: [:]))
+                .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-hooks-\(name).png"))
+            window.close()
+        }
+
+        let asking = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")), accountName: "ana@example.com")
+        let request = PermissionRequest(
+            id: "p1", toolName: "Bash", displayName: "Bash", input: .object(["command": .string("git push --force")]),
+            description: "Force-push the branch", suggestions: [], toolUseID: nil, hookReason: "Force pushes need a human: this branch has an open PR."
+        )
+        let card = PermissionCard(request: request, session: asking).padding(20).frame(width: 640)
+        let hosting = NSHostingView(rootView: card)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.setContentSize(hosting.fittingSize)
+        window.orderFrontRegardless()
+        try await Task.sleep(for: .milliseconds(600))
+        let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+        try #require(bitmap.representation(using: .png, properties: [:]))
+            .write(to: URL(filePath: try #require(renderDirectory)).appending(path: "relevo-code-hook-permission.png"))
+        window.close()
+    }
+
     @Test func rendersAMessageSentWhileClaudeWorks() async throws {
         _ = NSApplication.shared
         let session = Session(configuration: SessionConfiguration(directory: URL(filePath: "/Users/ana/code/vertex")), accountName: "ana@example.com", title: "Fix the build")

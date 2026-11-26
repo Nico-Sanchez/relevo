@@ -27,7 +27,7 @@ public struct SessionConfiguration: Sendable, Equatable {
     public var arguments: [String] {
         var arguments = [
             "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-            "--include-partial-messages", "--permission-prompt-tool", "stdio", "--permission-mode", permissionMode,
+            "--include-partial-messages", "--include-hook-events", "--permission-prompt-tool", "stdio", "--permission-mode", permissionMode,
         ]
         if permissionMode == "bypassPermissions" {
             arguments.append("--allow-dangerously-skip-permissions")

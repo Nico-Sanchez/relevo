@@ -134,7 +134,7 @@ struct Transcript: View {
                     if session.status == .working || session.status == .starting {
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
-                            Text(session.activity ?? (session.status == .starting ? String(localized: "Starting Claude Code") : session.isThinking ? String(localized: "Thinking") : String(localized: "Working")))
+                            Text(session.runningHook.map { String(localized: "Running the \($0) hook") } ?? session.activity ?? (session.status == .starting ? String(localized: "Starting Claude Code") : session.isThinking ? String(localized: "Thinking") : String(localized: "Working")))
                                 .foregroundStyle(.secondary)
                         }
                         .id("activity")
@@ -185,6 +185,78 @@ struct ItemView: View {
             AutomatedMessageView(summary: summary, text: text)
         case .notice(let notice):
             NoticeView(notice: notice)
+        case .hook(let event):
+            HookEventView(event: event)
+        }
+    }
+}
+
+struct HookEventView: View {
+    let event: HookEvent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: Self.icon(event.kind))
+                    .foregroundStyle(Self.tint(event.kind))
+                    .frame(width: 16)
+                Text(Self.title(event))
+                    .fontWeight(event.kind == .message ? .regular : .medium)
+                    .fixedSize(horizontal: false, vertical: true)
+                if event.kind == .message, let hook = event.hook {
+                    Text(verbatim: hook)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            if event.kind != .message, !event.text.isEmpty {
+                Capped(maxHeight: 140) {
+                    Text(event.text)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.leading, 24)
+            }
+            if event.kind == .blockedPrompt {
+                Text("Fix the hook, then send your message again.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .padding(.leading, 24)
+            }
+        }
+        .font(.callout)
+        .textSelection(.enabled)
+    }
+
+    static func title(_ event: HookEvent) -> String {
+        switch event.kind {
+        case .blockedPrompt:
+            String(localized: "A hook blocked your prompt")
+        case .reprompted:
+            String(localized: "A hook re-prompted Claude")
+        case .feedback:
+            event.hook.map { String(localized: "The \($0) hook sent feedback to Claude") } ?? String(localized: "A hook sent feedback to Claude")
+        case .message:
+            event.text
+        case .failed:
+            event.hook.map { String(localized: "The \($0) hook failed") } ?? String(localized: "A hook failed")
+        }
+    }
+
+    static func icon(_ kind: HookEvent.Kind) -> String {
+        switch kind {
+        case .blockedPrompt: "hand.raised.fill"
+        case .reprompted: "arrow.uturn.backward"
+        case .feedback: "text.bubble"
+        case .message: "info.circle"
+        case .failed: "exclamationmark.triangle"
+        }
+    }
+
+    static func tint(_ kind: HookEvent.Kind) -> Color {
+        switch kind {
+        case .blockedPrompt, .failed: .orange
+        case .reprompted, .feedback, .message: .secondary
         }
     }
 }
@@ -303,6 +375,20 @@ struct ToolCallView: View {
             }
             .buttonStyle(.plain)
 
+            if call.state == .blocked, let reason = call.result {
+                Label {
+                    Text("Blocked by a hook: \(reason)")
+                        .fixedSize(horizontal: false, vertical: true)
+                } icon: {
+                    Image(systemName: "hand.raised.slash")
+                }
+                .font(.callout)
+                .foregroundStyle(.orange)
+                .textSelection(.enabled)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
+
             if expanded {
                 Divider()
                 ToolDetail(call: call)
@@ -417,6 +503,9 @@ struct ToolState: View {
             Image(systemName: "checkmark").foregroundStyle(.green)
         case .failed:
             Image(systemName: "xmark").foregroundStyle(.red)
+        case .blocked:
+            Image(systemName: "hand.raised.slash.fill").foregroundStyle(.orange)
+                .help("Blocked by a hook")
         case .denied:
             Image(systemName: "nosign").foregroundStyle(.secondary)
         case .stopped:
@@ -437,7 +526,7 @@ struct ToolDetail: View {
             } else {
                 CodeText(text: call.input.prettyText)
             }
-            if let result = call.result, call.patch.isEmpty || call.state == .failed {
+            if let result = call.result, call.state != .blocked, call.patch.isEmpty || call.state == .failed {
                 CodeText(text: String(result.prefix(6000)))
                     .foregroundStyle(call.state == .failed ? .red : .secondary)
             }
@@ -534,6 +623,17 @@ struct PermissionCard: View {
                         .truncationMode(.middle)
                 }
             }
+            if let reason = request.hookReason {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Self.hookTitle(for: request.toolName))
+                        .fontWeight(.medium)
+                    Text(reason)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.callout)
+                .textSelection(.enabled)
+            }
             if !request.detail.isEmpty {
                 if request.toolName == "Edit" {
                     DiffView(lines: request.detail.split(separator: "\n", omittingEmptySubsequences: false).map(String.init), maxHeight: 180)
@@ -556,6 +656,14 @@ struct PermissionCard: View {
         .padding(14)
         .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.orange.opacity(0.4)))
+    }
+
+    static func hookTitle(for tool: String) -> String {
+        switch tool {
+        case "Bash": String(localized: "A hook requires confirmation for this command")
+        case "Edit", "MultiEdit", "Write", "NotebookEdit": String(localized: "A hook requires confirmation for this edit")
+        default: String(localized: "A hook requires confirmation for this tool")
+        }
     }
 }
 
@@ -972,15 +1080,18 @@ struct AutomatedMessageView: View {
                     Image(systemName: "bolt.fill").foregroundStyle(.orange)
                     Text(summary).fontWeight(.medium)
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                    if !text.isEmpty {
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                    }
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            if expanded {
+            .disabled(text.isEmpty)
+            if expanded, !text.isEmpty {
                 CodeText(text: text, maxHeight: 300)
             }
         }

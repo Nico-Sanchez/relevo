@@ -266,6 +266,7 @@ public enum HistoryEntry: Sendable, Equatable {
     case user(String)
     case event(Incoming)
     case compacted
+    case automated(summary: String, text: String)
 }
 
 public enum History {
@@ -279,11 +280,14 @@ public enum History {
         for line in lines where line["isSidechain"]?.bool != true {
             switch line["type"]?.string {
             case "user":
-                guard line["isMeta"]?.bool != true else { continue }
+                if let notification = TaskNotification.parse(rawText(line["message"]?["content"])) {
+                    entries.append(.automated(summary: notification.summary, text: notification.detail))
+                    continue
+                }
                 let result = Wire.parse(line)
                 if result != .ignored {
                     entries.append(.event(result))
-                } else if let text = userText(line["message"]?["content"]) {
+                } else if line["isMeta"]?.bool != true, let text = userText(line["message"]?["content"]) {
                     entries.append(.user(text))
                 }
             case "assistant":
@@ -293,11 +297,29 @@ public enum History {
                 }
             case "system" where line["subtype"]?.string == "compact_boundary":
                 entries.append(.compacted)
+            case "system" where line["subtype"]?.string == "informational":
+                guard case .hook(let hook) = Wire.parse(line) else { continue }
+                if hook.kind == .blockedPrompt, let prompt = Hooks.blockedPrompt(line["content"]?.string ?? "")?.prompt {
+                    entries.append(.user(prompt))
+                }
+                entries.append(.event(.hook(hook)))
+            case "attachment":
+                if let hook = line["attachment"].flatMap(Hooks.attachment) {
+                    entries.append(.event(.hook(hook)))
+                }
             default:
                 break
             }
         }
         return entries
+    }
+
+    static func rawText(_ content: JSONValue?) -> String {
+        switch content {
+        case .string(let text): text
+        case .array(let blocks): blocks.compactMap { $0["type"]?.string == "text" ? $0["text"]?.string : nil }.joined(separator: "\n")
+        default: ""
+        }
     }
 
     static func userText(_ content: JSONValue?) -> String? {

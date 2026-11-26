@@ -49,6 +49,7 @@ public struct PermissionRequest: Sendable, Equatable, Identifiable {
     public let description: String?
     public let suggestions: [JSONValue]
     public let toolUseID: String?
+    public var hookReason: String? = nil
 
     public var allowsEditsForSession: Bool {
         suggestions.contains { $0["type"]?.string == "setMode" && $0["mode"]?.string == "acceptEdits" }
@@ -141,6 +142,9 @@ public enum Incoming: Sendable, Equatable {
     case permissionRequest(PermissionRequest)
     case usage([UsageWindow])
     case backgroundTasks([RunningTask])
+    case hook(HookEvent)
+    case hookStarted(id: String, name: String)
+    case hookFinished(id: String, event: HookEvent?)
     case result(TurnResult)
     case exited(status: Int32, message: String)
     case ignored
@@ -169,7 +173,11 @@ public enum Wire {
                   let id = message["message"]?["id"]?.string else { return .ignored }
             return .assistant(messageID: id, blocks: content.compactMap(block))
         case "user":
-            return toolResult(message)
+            let result = toolResult(message)
+            guard result == .ignored, message["isSynthetic"]?.bool == true || message["isMeta"]?.bool == true,
+                  let text = History.userText(message["message"]?["content"]),
+                  let event = Hooks.reprompt(fromUserText: text) else { return result }
+            return .hook(event)
         case "rate_limit_event":
             return usage(message["rate_limit_info"]?["unifiedWindows"])
         case "result":
@@ -221,7 +229,8 @@ public enum Wire {
             input: request["input"] ?? .object([:]),
             description: request["description"]?.string,
             suggestions: request["permission_suggestions"]?.array ?? [],
-            toolUseID: request["tool_use_id"]?.string
+            toolUseID: request["tool_use_id"]?.string,
+            hookReason: request["decision_reason_type"]?.string == "hook" ? request["decision_reason"]?.string : nil
         ))
     }
 
@@ -242,6 +251,14 @@ public enum Wire {
                 guard let id = task["task_id"]?.string else { return nil }
                 return RunningTask(id: id, description: task["description"]?.string ?? id, kind: task["task_type"]?.string)
             })
+        case "informational":
+            return Hooks.informational(message).map(Incoming.hook) ?? .ignored
+        case "hook_started":
+            guard let id = message["hook_id"]?.string else { return .ignored }
+            return .hookStarted(id: id, name: message["hook_name"]?.string ?? message["hook_event"]?.string ?? "")
+        case "hook_response":
+            guard let id = message["hook_id"]?.string else { return .ignored }
+            return .hookFinished(id: id, event: Hooks.response(message))
         default:
             return .ignored
         }
