@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 @testable import RelevoCode
 @testable import RelevoCodeApp
@@ -225,6 +227,44 @@ import Testing
         #expect(model.drafts[session.id] == "Fix it")
         #expect(model.linkProblem == nil)
         model.close(session)
+    }
+
+    @Test func keepsAPrefilledPromptWhileAnotherSessionIsShown() async throws {
+        _ = NSApplication.shared
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let model = loadedModel()
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: ContentView(model: model))
+        defer {
+            model.sessions.forEach(model.close)
+            window.close()
+        }
+
+        model.openLink(URL(string: "relevo-code://new?account=~/.claude&folder=\(folder.path)&prompt=First")!)
+        let first = try #require(model.sessions.first)
+        #expect(await composerText(in: window, becoming: "First") == "First")
+        model.openLink(URL(string: "relevo-code://new?account=~/.claude&folder=\(folder.path)&prompt=Second")!)
+        #expect(await composerText(in: window, becoming: "Second") == "Second")
+        model.selection = .open(first.id)
+        #expect(await composerText(in: window, becoming: "First") == "First")
+    }
+
+    func composerText(in window: NSWindow, becoming expected: String) async -> String? {
+        func editable(in view: NSView) -> NSTextView? {
+            if let text = view as? NSTextView, text.isEditable { return text }
+            return view.subviews.lazy.compactMap(editable).first
+        }
+        var text: String?
+        for _ in 0..<40 {
+            window.contentView?.layoutSubtreeIfNeeded()
+            text = window.contentView.flatMap(editable)?.string
+            if text == expected { break }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return text
     }
 
     @Test func startsNothingForAnUnknownAccount() {

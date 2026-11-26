@@ -5,7 +5,6 @@ import SwiftUI
 struct SessionView: View {
     let session: Session
     let model: AppModel
-    @State private var draft = ""
     @AppStorage("showingSidePane") private var showingSidePane = true
 
     var body: some View {
@@ -21,7 +20,7 @@ struct SessionView: View {
                 if case .ended(let reason) = session.status {
                     EndedBanner(reason: reason)
                 } else {
-                    Composer(session: session, draft: $draft)
+                    Composer(session: session, draft: Binding(get: { model.drafts[session.id] ?? "" }, set: { model.drafts[session.id] = $0 }))
                 }
             }
             .frame(maxWidth: 780)
@@ -35,11 +34,6 @@ struct SessionView: View {
         }
         .navigationTitle(session.title)
         .navigationSubtitle(session.workingDirectory.path)
-        .onAppear {
-            if let prompt = model.drafts.removeValue(forKey: session.id) {
-                draft = prompt
-            }
-        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
