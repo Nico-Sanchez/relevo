@@ -27,8 +27,18 @@ public struct DiffResult: Sendable, Equatable {
     public let base: String?
 }
 
+public struct NotAGitRepository: Error {
+    public init() {}
+}
+
 public enum GitDiff {
+    public static func isRepository(_ directory: URL, environment: [String: String]) -> Bool {
+        let output = try? Git(directory: directory, environment: environment).run(["rev-parse", "--is-inside-work-tree"])
+        return output?.trimmingCharacters(in: .whitespacesAndNewlines) == "true"
+    }
+
     public static func load(in directory: URL, scope: DiffScope, environment: [String: String]) throws -> DiffResult {
+        guard isRepository(directory, environment: environment) else { throw NotAGitRepository() }
         let git = Git(directory: directory, environment: environment)
         var base: String?
         let target: String

@@ -144,4 +144,20 @@ final class Recorder {
 
         #expect(monitor.state == .failed("fatal: not a git repository"))
     }
+
+    @Test func saysTheFolderIsNotARepositoryWithoutAskingGh() async {
+        let source = StubSource(nil)
+        source.set(.failure(CommandError(arguments: ["pr", "view"], status: 1, output: "failed to run git: fatal: not a git repository")))
+        let monitor = PullRequestMonitor(
+            directory: { URL(filePath: "/work/notes") },
+            isRepository: { _ in false },
+            makeSource: { _ in source },
+            canDeliver: { true },
+            deliver: { _ in }
+        )
+
+        await monitor.refresh()
+
+        #expect(monitor.state == .failed("This folder isn't a git repository."))
+    }
 }
