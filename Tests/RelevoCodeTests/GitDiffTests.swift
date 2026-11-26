@@ -84,10 +84,17 @@ import Testing
         #expect(branch.files[0].hunks.flatMap(\.lines).filter { $0.hasPrefix("+") || $0.hasPrefix("-") } == ["-two", "+TWO", "+three"])
     }
 
-    @Test func reportsWhatGitSaysOutsideARepository() throws {
+    @Test func recognisesAFolderThatIsNotARepository() throws {
         let folder = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
+        try "notes\n".write(to: folder.appending(path: "notes.txt"), atomically: true, encoding: .utf8)
 
-        #expect(throws: GitError.self) { try GitDiff.load(in: folder, scope: .uncommitted, environment: [:]) }
+        #expect(!GitDiff.isRepository(folder, environment: [:]))
+        for scope in DiffScope.allCases {
+            #expect(throws: NotAGitRepository.self) { try GitDiff.load(in: folder, scope: scope, environment: [:]) }
+        }
+
+        _ = try Git(directory: folder, environment: [:]).run(["init", "-q"])
+        #expect(GitDiff.isRepository(folder, environment: [:]))
     }
 }

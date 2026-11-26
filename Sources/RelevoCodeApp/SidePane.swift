@@ -124,6 +124,8 @@ struct ChangesView: View {
         case .success(let value):
             result = value
             problem = nil
+        case .failure(is NotAGitRepository):
+            problem = String(localized: "This folder isn't a git repository.")
         case .failure(let error):
             problem = String(describing: error)
         }

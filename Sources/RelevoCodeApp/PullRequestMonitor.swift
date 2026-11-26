@@ -22,6 +22,7 @@ final class PullRequestMonitor {
     private(set) var queued: [AutomatedMessage] = []
 
     private let directory: () -> URL
+    private let isRepository: @Sendable (URL) -> Bool
     private let makeSource: @Sendable (URL) -> any PullRequestSource
     private let canDeliver: () -> Bool
     private let deliver: (AutomatedMessage) -> Void
@@ -32,12 +33,14 @@ final class PullRequestMonitor {
 
     init(
         directory: @escaping () -> URL,
+        isRepository: @escaping @Sendable (URL) -> Bool = { _ in true },
         makeSource: @escaping @Sendable (URL) -> any PullRequestSource,
         canDeliver: @escaping () -> Bool,
         deliver: @escaping (AutomatedMessage) -> Void,
         interval: Duration = .seconds(60)
     ) {
         self.directory = directory
+        self.isRepository = isRepository
         self.makeSource = makeSource
         self.canDeliver = canDeliver
         self.deliver = deliver
@@ -47,6 +50,7 @@ final class PullRequestMonitor {
     convenience init(session: Session, environment: [String: String]) {
         self.init(
             directory: { session.workingDirectory },
+            isRepository: { GitDiff.isRepository($0, environment: environment) },
             makeSource: { GitHubCLI(directory: $0, environment: environment) },
             canDeliver: { session.canSend },
             deliver: { session.sendAutomated($0.text, summary: $0.summary) }
@@ -90,13 +94,20 @@ final class PullRequestMonitor {
     }
 
     func refresh() async {
-        let source = makeSource(directory())
+        let directory = directory()
+        let isRepository = isRepository
+        let source = makeSource(directory)
         let needsViewer = autofix && watch == nil
         let fetched = await Task.detached { () -> Result<(PullRequest?, String?), Error> in
-            Result { (try source.pullRequest(), needsViewer ? try source.viewer() : nil) }
+            Result {
+                guard isRepository(directory) else { throw NotAGitRepository() }
+                return (try source.pullRequest(), needsViewer ? try source.viewer() : nil)
+            }
         }.value
         lastChecked = .now
         switch fetched {
+        case .failure(is NotAGitRepository):
+            state = .failed(String(localized: "This folder isn't a git repository."))
         case .failure(let error):
             state = .failed(Self.describe(error))
         case .success(let (pullRequest, viewer)):
