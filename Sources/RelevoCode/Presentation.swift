@@ -313,4 +313,12 @@ public enum ToolActivity: Equatable, Sendable {
         }
         return .done
     }
+
+    public static func blockReasons(of calls: [ToolCall]) -> [String] {
+        var seen: Set<String> = []
+        return calls.compactMap { call in
+            guard call.state == .blocked, let reason = call.result, seen.insert(reason).inserted else { return nil }
+            return reason
+        }
+    }
 }

@@ -129,6 +129,16 @@ private func history(_ lines: [String]) -> [HistoryEntry] {
         #expect(ToolActivity.state(of: calls(session)) == .blocked)
     }
 
+    @Test func listsEachBlockReasonOnceForAGroupOfTools() {
+        let session = session()
+        session.apply(.assistant(messageID: "m2", blocks: [.toolUse(id: "t3", name: "Bash", input: .object(["command": .string("gh pr create --draft")]))]))
+        session.apply(.toolResult(toolUseID: "t1", content: "PreToolUse:Bash hook error: link an issue first", isError: true, patch: []))
+        session.apply(.toolResult(toolUseID: "t2", content: "Exit code 1\nno such file", isError: true, patch: []))
+        session.apply(.toolResult(toolUseID: "t3", content: "PreToolUse:Bash hook error: link an issue first", isError: true, patch: []))
+
+        #expect(ToolActivity.blockReasons(of: calls(session)) == ["link an issue first"])
+    }
+
     @Test func keepsOtherToolErrorsAsFailures() {
         let session = session()
         session.apply(.toolResult(toolUseID: "t1", content: "Exit code 1\nno such file", isError: true, patch: []))

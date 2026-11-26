@@ -376,17 +376,7 @@ struct ToolCallView: View {
             .buttonStyle(.plain)
 
             if call.state == .blocked, let reason = call.result {
-                Label {
-                    Text("Blocked by a hook: \(reason)")
-                        .fixedSize(horizontal: false, vertical: true)
-                } icon: {
-                    Image(systemName: "hand.raised.slash")
-                }
-                .font(.callout)
-                .foregroundStyle(.orange)
-                .textSelection(.enabled)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
+                BlockedByHook(reason: reason)
             }
 
             if expanded {
@@ -426,35 +416,14 @@ struct ToolGroupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Button {
-                withAnimation(.snappy(duration: 0.15)) { expanded.toggle() }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: ToolCallView.icon(for: (current ?? calls[0]).name))
-                        .frame(width: 16)
-                        .foregroundStyle(.secondary)
-                    Text(Self.summary(of: calls))
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-                    if let current {
-                        Text(current.summary(relativeTo: directory))
-                            .font(.system(.callout, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                if !expanded {
+                    ForEach(ToolActivity.blockReasons(of: calls), id: \.self) { reason in
+                        BlockedByHook(reason: reason)
                     }
-                    Spacer(minLength: 8)
-                    ToolState(state: ToolActivity.state(of: calls))
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
             if expanded {
@@ -466,6 +435,38 @@ struct ToolGroupView: View {
                 .padding(.leading, 18)
             }
         }
+    }
+
+    private var header: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.15)) { expanded.toggle() }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: ToolCallView.icon(for: (current ?? calls[0]).name))
+                    .frame(width: 16)
+                    .foregroundStyle(.secondary)
+                Text(Self.summary(of: calls))
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                if let current {
+                    Text(current.summary(relativeTo: directory))
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 8)
+                ToolState(state: ToolActivity.state(of: calls))
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     static func summary(of calls: [ToolCall]) -> String {
@@ -487,6 +488,24 @@ struct ToolGroupView: View {
         case .agents(let count): count == 1 ? String(localized: "Ran an agent") : String(localized: "Ran \(count) agents")
         case .tools(let count): count == 1 ? String(localized: "Used a tool") : String(localized: "Used \(count) tools")
         }
+    }
+}
+
+struct BlockedByHook: View {
+    let reason: String
+
+    var body: some View {
+        Label {
+            Text("Blocked by a hook: \(reason)")
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "hand.raised.slash")
+        }
+        .font(.callout)
+        .foregroundStyle(.orange)
+        .textSelection(.enabled)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
     }
 }
 
