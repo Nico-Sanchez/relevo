@@ -11,7 +11,10 @@ struct RelevoCodeApp: App {
             ContentView(model: model)
                 .frame(minWidth: 900, minHeight: 600)
                 .task { await model.load() }
+                .onOpenURL { model.openLink($0) }
+                .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
+        .handlesExternalEvents(matching: ["*"])
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Session") { model.showingNewSession = true }
@@ -40,13 +43,20 @@ final class AppModel {
     var problem: String?
     var showingNewSession = false
     var monitors: [Session.ID: PullRequestMonitor] = [:]
+    var drafts: [Session.ID: String] = [:]
+    var linkProblem: String?
 
     private let defaults = UserDefaults.standard
+    private var usage: [String: AccountUsage]
+    private var savedAccounts: [AccountSnapshot]?
+    var isLoaded = false
+    private var pendingLinks: [URL] = []
 
     init() {
         accounts = [.standard] + (defaults.stringArray(forKey: "accountFolders") ?? []).map {
             ClaudeAccount(configDirectory: URL(filePath: $0))
         }
+        usage = AccountsFile.usage(at: AccountsFile.location)
     }
 
     var selected: Session? {
@@ -88,6 +98,11 @@ final class AppModel {
         }
         await refreshAccounts()
         await refreshRecent()
+        isLoaded = true
+        for link in pendingLinks {
+            openLink(link)
+        }
+        pendingLinks = []
         if sessions.isEmpty, recent.isEmpty {
             showingNewSession = true
         }
@@ -98,6 +113,46 @@ final class AppModel {
         for account in accounts {
             accountInfo[account.id] = await account.status(executable: executable, environment: environment)
         }
+        saveAccounts()
+    }
+
+    func openLink(_ url: URL) {
+        guard isLoaded else {
+            pendingLinks.append(url)
+            return
+        }
+        guard executable != nil else { return }
+        do throws(NewSessionLink.Problem) {
+            let link = try NewSessionLink(url)
+            let (account, folder) = try link.resolve(in: accounts)
+            showingNewSession = false
+            let isRepository = FileManager.default.fileExists(atPath: folder.appending(path: ".git").path)
+            let session = newSession(in: folder, account: account, permissionMode: "default", worktree: isRepository)
+            drafts[session.id] = link.prompt
+        } catch {
+            linkProblem = Self.describe(error)
+        }
+    }
+
+    static func describe(_ problem: NewSessionLink.Problem) -> String {
+        switch problem {
+        case .notNewSessionLink: String(localized: "Relevo Code only opens relevo-code://new links.")
+        case .missingAccount: String(localized: "The link doesn't say which account to use.")
+        case .unknownAccount(let id): String(localized: "No account here matches \(id). Add its folder in New Session first.")
+        case .missingFolder: String(localized: "The link doesn't say which folder to open.")
+        case .folderNotFound(let path): String(localized: "There's no folder at \(path).")
+        }
+    }
+
+    private func recordUsage(_ windows: [UsageWindow], configDirectory: URL?) {
+        usage[ClaudeAccount(configDirectory: configDirectory).id] = AccountUsage(windows, at: .now)
+        saveAccounts()
+    }
+
+    private func saveAccounts() {
+        let snapshots = accounts.map { AccountSnapshot(account: $0, info: accountInfo[$0.id], usage: usage[$0.id]) }
+        guard snapshots != savedAccounts, (try? AccountsFile.write(snapshots, at: .now, to: AccountsFile.location)) != nil else { return }
+        savedAccounts = snapshots
     }
 
     func refreshRecent() async {
@@ -127,16 +182,23 @@ final class AppModel {
     }
 
     func startSession(in folder: URL, account: ClaudeAccount, permissionMode: String, worktree: Bool) {
-        let configuration = SessionConfiguration(
-            directory: folder, configDirectory: account.configDirectory, permissionMode: permissionMode,
-            worktree: worktree ? "session-\(UUID().uuidString.prefix(6).lowercased())" : nil
-        )
-        let session = Session(configuration: configuration, accountName: name(of: account), environment: environment ?? [:], executable: executable)
-        show(session)
+        let session = newSession(in: folder, account: account, permissionMode: permissionMode, worktree: worktree)
         lastFolder = folder
         lastAccountID = account.id
         lastPermissionMode = permissionMode
         session.start()
+    }
+
+    private func newSession(in folder: URL, account: ClaudeAccount, permissionMode: String, worktree: Bool) -> Session {
+        let configuration = SessionConfiguration(
+            directory: folder, configDirectory: account.configDirectory, permissionMode: permissionMode,
+            worktree: worktree ? "session-\(UUID().uuidString.prefix(6).lowercased())" : nil
+        )
+        let session = Session(
+            configuration: configuration, accountName: name(of: account), environment: environment ?? [:], executable: executable, dormant: true
+        )
+        show(session)
+        return session
     }
 
     func open(_ past: PastSession, in account: ClaudeAccount? = nil) {
@@ -173,6 +235,7 @@ final class AppModel {
     func close(_ session: Session) {
         session.stop()
         monitors.removeValue(forKey: session.id)?.stop()
+        drafts.removeValue(forKey: session.id)
         sessions.removeAll { $0.id == session.id }
         if selection == .open(session.id) {
             selection = sessions.first.map { .open($0.id) }
@@ -182,6 +245,10 @@ final class AppModel {
     private func show(_ session: Session) {
         sessions.insert(session, at: 0)
         selection = .open(session.id)
+        session.onUsage = { [weak self, weak session] windows in
+            guard let self, let session else { return }
+            recordUsage(windows, configDirectory: session.configuration.configDirectory)
+        }
         let monitor = PullRequestMonitor(session: session, environment: environment ?? [:])
         monitors[session.id] = monitor
         monitor.start()
@@ -214,6 +281,10 @@ struct ContentView: View {
         }
         .sheet(isPresented: $model.showingNewSession) {
             NewSessionView(model: model)
+        }
+        .alert("Can't open the link", isPresented: Binding(get: { model.linkProblem != nil }, set: { if !$0 { model.linkProblem = nil } })) {
+        } message: {
+            Text(model.linkProblem ?? "")
         }
         .onChange(of: model.selection) {
             if case .recent(let id) = model.selection, let past = model.recent.first(where: { $0.id == id }) {

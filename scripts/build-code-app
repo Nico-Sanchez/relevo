@@ -26,6 +26,7 @@ plutil -replace CFBundleIdentifier -string dev.nicosanchez.relevo.code "$plist"
 plutil -replace CFBundleName -string "Relevo Code" "$plist"
 plutil -replace CFBundleDisplayName -string "Relevo Code" "$plist"
 plutil -remove LSUIElement "$plist"
+plutil -insert CFBundleURLTypes -json '[{"CFBundleURLName":"dev.nicosanchez.relevo.code","CFBundleURLSchemes":["relevo-code"]}]' "$plist"
 cp -R Resources/CodeLocalization/*.lproj "$app/Contents/Resources/"
 codesign --force --sign - "$app"
 

@@ -5,7 +5,6 @@ import SwiftUI
 struct SessionView: View {
     let session: Session
     let model: AppModel
-    @State private var draft = ""
     @AppStorage("showingSidePane") private var showingSidePane = true
 
     var body: some View {
@@ -15,13 +14,13 @@ struct SessionView: View {
                 if let request = session.pendingPermissions.first {
                     PermissionCard(request: request, session: session)
                 }
-                if session.status == .dormant {
+                if session.status == .dormant, session.sessionID != nil {
                     ResumeBar(session: session, model: model)
                 }
                 if case .ended(let reason) = session.status {
                     EndedBanner(reason: reason)
                 } else {
-                    Composer(session: session, draft: $draft)
+                    Composer(session: session, draft: Binding(get: { model.drafts[session.id] ?? "" }, set: { model.drafts[session.id] = $0 }))
                 }
             }
             .frame(maxWidth: 780)
@@ -388,7 +387,7 @@ struct Composer: View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .topLeading) {
                 if draft.isEmpty {
-                    Text(session.status == .dormant ? String(localized: "Send a message to continue this session…") : String(localized: "Ask Claude to do something…"))
+                    Text(session.status == .dormant && session.sessionID != nil ? String(localized: "Send a message to continue this session…") : String(localized: "Ask Claude to do something…"))
                         .foregroundStyle(.tertiary)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 8)

@@ -78,6 +78,7 @@ public final class Session: Identifiable {
     public private(set) var customTitle: String?
     public private(set) var selectedModel: String?
     public private(set) var effort: String?
+    @ObservationIgnored public var onUsage: (([UsageWindow]) -> Void)?
 
     private let environment: [String: String]
     private let executable: URL?
@@ -367,6 +368,7 @@ public final class Session: Identifiable {
             }
         case .usage(let windows):
             usage = windows
+            onUsage?(windows)
         case .result(let result):
             status = .idle
             activity = nil

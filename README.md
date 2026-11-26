@@ -171,6 +171,92 @@ Claude Desktop keeps its data in `~/Library/Application Support/Claude`.
 Every change happens with Claude closed, and reading usage never changes
 anything.
 
+## Driving Relevo Code from other tools
+
+Relevo Code, built with `scripts/build-code-app`, runs Claude Code sessions in
+several accounts at once, each with its own `CLAUDE_CONFIG_DIR`. Other local
+tools, such as a board of your issues, can open sessions in it and read every
+account's usage. The link and the file below are a contract: changing either
+is a breaking change.
+
+### Open a session: `relevo-code://new`
+
+```text
+relevo-code://new?account=<id>&folder=<absolute path>&prompt=<text>
+```
+
+| Parameter | Required | Value |
+| --- | --- | --- |
+| `account` | yes | An account's `id` from `code-accounts.json`: its `CLAUDE_CONFIG_DIR` path, or `~/.claude` for the standard account. |
+| `folder` | yes | The absolute path of an existing folder. |
+| `prompt` | no | Text put in the message box, not sent: the person reads it and presses Return. |
+
+Percent-encode every value (`%20` for a space; `+` stays a literal plus). Any
+page can open such a link, so nothing runs until the person sends the message:
+only then does Claude Code start, in a new worktree when the folder is a git
+repository, and in **Ask before acting** whatever mode was used last (they can
+pick another before sending). An unknown account or a folder that isn't there
+shows an error and starts nothing. The link launches Relevo Code if it isn't
+running.
+
+```bash
+open "relevo-code://new?account=~/.claude&folder=%2FUsers%2Fana%2Fcode%2Fsite&prompt=Fix%20the%20header"
+```
+
+### Accounts and usage: `code-accounts.json`
+
+Relevo Code keeps `~/Library/Application Support/Relevo/code-accounts.json`
+up to date: it rewrites it when its accounts or their sign-in change, and on
+every rate-limit event a session receives. Each write goes to a temporary file
+that is then renamed over the old one, so a reader never sees half a file. It
+makes no requests of its own: account details come from
+`claude auth status --json`, and usage from the `rate_limit_event` messages
+Claude Code already streams.
+
+```json
+{
+  "updatedAt": "2026-11-26T15:42:35Z",
+  "accounts": [
+    {
+      "id": "~/.claude",
+      "configDir": null,
+      "email": "ana@example.com",
+      "organization": "Ana's Organization",
+      "subscription": "pro",
+      "usage": null
+    },
+    {
+      "id": "/Users/ana/.claude-work",
+      "configDir": "/Users/ana/.claude-work",
+      "email": "ana@work.example",
+      "organization": "Work",
+      "subscription": "max",
+      "usage": {
+        "updatedAt": "2026-11-26T15:40:02Z",
+        "windows": [
+          { "label": "5-hour", "percentUsed": 8, "resetsAt": "2026-11-26T19:00:00Z" },
+          { "label": "Weekly", "percentUsed": 62, "resetsAt": "2026-11-30T09:00:00Z" }
+        ]
+      }
+    }
+  ]
+}
+```
+
+- Every key is always present; unknown values are `null`. Dates are ISO 8601
+  in UTC.
+- `id` is what `account=` takes. `configDir` is the absolute
+  `CLAUDE_CONFIG_DIR`, or `null` for `~/.claude`.
+- `email`, `organization` and `subscription` come from `claude auth status`,
+  and are `null` while the account is signed out.
+- `usage` is `null` until a session in that account receives a rate-limit
+  event, then holds the latest one, kept across restarts. It is as fresh as the
+  last message sent in that account from Relevo Code.
+- `percentUsed` is a whole number and can pass 100. `resetsAt` can be `null`.
+- `label` is `5-hour`, `Weekly`, or `Weekly · <name>` for a narrower weekly
+  window such as `Weekly · Opus`. Any other window keeps Claude Code's own
+  name for it.
+
 ## Privacy
 
 - With **Show usage** off, the default, Relevo makes no network requests. With
@@ -178,6 +264,8 @@ anything.
   minute while the menu is open.
 - Saved logins stay on your Mac, in a folder only your user can read. The
   keychain key and the decrypted cookies are only held in memory.
+- Relevo Code's `code-accounts.json` holds your accounts' emails and usage, and
+  only your user can read it.
 - No analytics, no telemetry, no update checks.
 - Found a security problem? See [SECURITY.md](SECURITY.md).
 
