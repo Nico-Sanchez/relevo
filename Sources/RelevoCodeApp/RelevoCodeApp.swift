@@ -49,7 +49,7 @@ final class AppModel {
     private let defaults = UserDefaults.standard
     private var usage: [String: AccountUsage]
     private var savedAccounts: [AccountSnapshot]?
-    private var loaded = false
+    var isLoaded = false
     private var pendingLinks: [URL] = []
 
     init() {
@@ -98,7 +98,7 @@ final class AppModel {
         }
         await refreshAccounts()
         await refreshRecent()
-        loaded = true
+        isLoaded = true
         for link in pendingLinks {
             openLink(link)
         }
@@ -117,7 +117,7 @@ final class AppModel {
     }
 
     func openLink(_ url: URL) {
-        guard loaded else {
+        guard isLoaded else {
             pendingLinks.append(url)
             return
         }
@@ -127,7 +127,7 @@ final class AppModel {
             let (account, folder) = try link.resolve(in: accounts)
             showingNewSession = false
             let isRepository = FileManager.default.fileExists(atPath: folder.appending(path: ".git").path)
-            let session = startSession(in: folder, account: account, permissionMode: lastPermissionMode, worktree: isRepository)
+            let session = newSession(in: folder, account: account, permissionMode: "default", worktree: isRepository)
             drafts[session.id] = link.prompt
         } catch {
             linkProblem = Self.describe(error)
@@ -181,18 +181,23 @@ final class AppModel {
         await refreshRecent()
     }
 
-    @discardableResult
-    func startSession(in folder: URL, account: ClaudeAccount, permissionMode: String, worktree: Bool) -> Session {
-        let configuration = SessionConfiguration(
-            directory: folder, configDirectory: account.configDirectory, permissionMode: permissionMode,
-            worktree: worktree ? "session-\(UUID().uuidString.prefix(6).lowercased())" : nil
-        )
-        let session = Session(configuration: configuration, accountName: name(of: account), environment: environment ?? [:], executable: executable)
-        show(session)
+    func startSession(in folder: URL, account: ClaudeAccount, permissionMode: String, worktree: Bool) {
+        let session = newSession(in: folder, account: account, permissionMode: permissionMode, worktree: worktree)
         lastFolder = folder
         lastAccountID = account.id
         lastPermissionMode = permissionMode
         session.start()
+    }
+
+    private func newSession(in folder: URL, account: ClaudeAccount, permissionMode: String, worktree: Bool) -> Session {
+        let configuration = SessionConfiguration(
+            directory: folder, configDirectory: account.configDirectory, permissionMode: permissionMode,
+            worktree: worktree ? "session-\(UUID().uuidString.prefix(6).lowercased())" : nil
+        )
+        let session = Session(
+            configuration: configuration, accountName: name(of: account), environment: environment ?? [:], executable: executable, dormant: true
+        )
+        show(session)
         return session
     }
 

@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import RelevoCode
+@testable import RelevoCodeApp
 
 @Suite struct NewSessionLinkTests {
     func link(_ string: String) throws(NewSessionLink.Problem) -> NewSessionLink {
@@ -191,5 +192,56 @@ import Testing
         session.apply(event(#"{"type":"rate_limit_event","rate_limit_info":{"unifiedWindows":{"five_hour":{"utilization":0.13,"resetsAt":1795497000}}}}"#))
 
         #expect(reported.map { $0.map(\.utilization) } == [[12], [13]])
+    }
+}
+
+@MainActor
+@Suite(.serialized) struct OpenLinkTests {
+    func loadedModel() -> AppModel {
+        let model = AppModel()
+        model.executable = URL(filePath: "/usr/bin/false")
+        model.isLoaded = true
+        return model
+    }
+
+    @Test func opensASessionThatRunsNothingUntilTheFirstMessage() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let model = loadedModel()
+        let remembered = model.lastPermissionMode
+        model.lastPermissionMode = "bypassPermissions"
+        defer { model.lastPermissionMode = remembered }
+
+        model.openLink(URL(string: "relevo-code://new?account=~/.claude&folder=\(folder.path)&prompt=Fix%20it")!)
+
+        let session = try #require(model.sessions.first)
+        #expect(model.sessions.count == 1)
+        #expect(session.status == .dormant)
+        #expect(session.sessionID == nil)
+        #expect(session.permissionMode == "default")
+        #expect(session.configuration.configDirectory == nil)
+        #expect(session.workingDirectory.path == folder.standardizedFileURL.path)
+        #expect(model.drafts[session.id] == "Fix it")
+        #expect(model.linkProblem == nil)
+        model.close(session)
+    }
+
+    @Test func startsNothingForAnUnknownAccount() {
+        let model = loadedModel()
+
+        model.openLink(URL(string: "relevo-code://new?account=%2Fnowhere&folder=%2Ftmp&prompt=x")!)
+
+        #expect(model.sessions.isEmpty)
+        #expect(model.linkProblem != nil)
+    }
+
+    @Test func waitsForTheAccountsBeforeOpeningALink() {
+        let model = AppModel()
+
+        model.openLink(URL(string: "relevo-code://new?account=%2Fnowhere&folder=%2Ftmp")!)
+
+        #expect(model.sessions.isEmpty)
+        #expect(model.linkProblem == nil)
     }
 }

@@ -191,11 +191,13 @@ relevo-code://new?account=<id>&folder=<absolute path>&prompt=<text>
 | `folder` | yes | The absolute path of an existing folder. |
 | `prompt` | no | Text put in the message box, not sent: the person reads it and presses Return. |
 
-Percent-encode every value (`%20` for a space; `+` stays a literal plus). The
-session starts like one from **New Session**: with the last permission mode
-used, and in a new worktree when the folder is a git repository. An unknown
-account or a folder that isn't there shows an error and starts nothing. The
-link launches Relevo Code if it isn't running.
+Percent-encode every value (`%20` for a space; `+` stays a literal plus). Any
+page can open such a link, so nothing runs until the person sends the message:
+only then does Claude Code start, in a new worktree when the folder is a git
+repository, and in **Ask before acting** whatever mode was used last (they can
+pick another before sending). An unknown account or a folder that isn't there
+shows an error and starts nothing. The link launches Relevo Code if it isn't
+running.
 
 ```bash
 open "relevo-code://new?account=~/.claude&folder=%2FUsers%2Fana%2Fcode%2Fsite&prompt=Fix%20the%20header"
