@@ -6,7 +6,6 @@ struct SessionView: View {
     let session: Session
     let model: AppModel
     let window: WindowModel
-    @State private var draft = ""
     @AppStorage("showingSidePane") private var showingSidePane = true
     @State private var isRepository = true
     @State private var watcher = SelectionWatcher()
@@ -29,13 +28,13 @@ struct SessionView: View {
                         PermissionCard(request: request, session: session)
                     }
                 }
-                if session.status == .dormant {
+                if session.status == .dormant, session.sessionID != nil {
                     ResumeBar(session: session, model: model, window: window)
                 }
                 if case .ended(let reason) = session.status {
                     EndedBanner(reason: reason)
                 } else {
-                    Composer(session: session, draft: $draft, focusRequest: focusRequest, models: model.models(for: session), fallbackEffort: fallbackEffort)
+                    Composer(session: session, draft: draft, focusRequest: focusRequest, models: model.models(for: session), fallbackEffort: fallbackEffort)
                 }
             }
             .frame(maxWidth: 780)
@@ -103,9 +102,13 @@ struct SessionView: View {
 }
 
 extension SessionView {
+    var draft: Binding<String> {
+        Binding(get: { model.drafts[session.id] ?? "" }, set: { model.drafts[session.id] = $0 })
+    }
+
     func quote(_ text: String) {
         window.nsWindow?.makeFirstResponder(nil)
-        draft = Quote.insert(text, into: draft)
+        draft.wrappedValue = Quote.insert(text, into: draft.wrappedValue)
         focusRequest += 1
     }
 }
@@ -923,7 +926,7 @@ struct Composer: View {
     }
 
     private var placeholder: String {
-        if session.status == .dormant {
+        if session.status == .dormant, session.sessionID != nil {
             String(localized: "Send a message to continue this session…")
         } else if session.isBusy {
             String(localized: "Tell Claude something while it works…")

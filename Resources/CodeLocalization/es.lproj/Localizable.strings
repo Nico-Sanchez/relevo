@@ -34,6 +34,7 @@
 "Blue" = "Azul";
 "Branch" = "Branch";
 "Bypass permissions" = "Omitir permisos";
+"Can't open the link" = "No se puede abrir el link";
 "Can't start Claude Code" = "No se puede iniciar Claude Code";
 "Cancel" = "Cancelar";
 "Changes" = "Cambios";
@@ -94,6 +95,7 @@
 "New review feedback on PR #%lld from %@" = "Nuevo feedback de review en el PR #%lld de %@";
 "New Session" = "Nueva sesión";
 "New Window" = "Nueva ventana";
+"No account here matches %@. Add its folder in New Session first." = "Ninguna cuenta coincide con %@. Agregá primero su carpeta en Nueva sesión.";
 "No changes" = "Sin cambios";
 "No changes to show" = "No hay cambios para mostrar";
 "No content changes" = "Sin cambios de contenido";
@@ -136,6 +138,7 @@
 "Recommended" = "Recomendado";
 "Refresh" = "Actualizar";
 "Relevo Code" = "Relevo Code";
+"Relevo Code only opens relevo-code://new links." = "Relevo Code solo abre links relevo-code://new.";
 "Renamed without changes" = "Renombrado sin cambios";
 "Review feedback" = "Feedback de review";
 "Running the %@ hook" = "Ejecutando el hook %@";
@@ -161,8 +164,11 @@
 "Tell Claude something while it works…" = "Decile algo a Claude mientras trabaja…";
 "The %@ hook failed" = "Falló el hook %@";
 "The %@ hook sent feedback to Claude" = "El hook %@ le mandó comentarios a Claude";
+"The link doesn't say which account to use." = "El link no dice qué cuenta usar.";
+"The link doesn't say which folder to open." = "El link no dice qué carpeta abrir.";
 "The turn ended with an error." = "El turno terminó con un error.";
 "The working tree is clean." = "No hay cambios sin commitear.";
+"There's no folder at %@." = "No hay ninguna carpeta en %@.";
 "Thinking" = "Pensando";
 "This branch has no pull request." = "Este branch no tiene pull request.";
 "This branch matches %@." = "Este branch no tiene cambios respecto de %@.";

@@ -14,6 +14,7 @@ final class WindowModel {
     let app: AppModel
     var selection: SidebarItem?
     var showingNewSession = false
+    var linkProblem: String?
     private(set) var accountID: String
     @ObservationIgnored weak var nsWindow: NSWindow?
     @ObservationIgnored var quoteSelection: (() -> Void)?
@@ -72,6 +73,24 @@ final class WindowModel {
 
     func open(_ past: PastSession) {
         selection = .open(app.open(past, in: account).id)
+    }
+
+    func openLink(_ url: URL) {
+        Task {
+            await app.load()
+            show(link: url)
+        }
+    }
+
+    func show(link url: URL) {
+        guard app.executable != nil else { return }
+        do throws(NewSessionLink.Problem) {
+            let session = try app.openLink(url)
+            showingNewSession = false
+            place(session, in: app.owner(of: session))
+        } catch {
+            linkProblem = AppModel.describe(error)
+        }
     }
 
     func handOff(_ session: Session, to account: ClaudeAccount) {
@@ -140,6 +159,8 @@ struct WindowRoot: View {
                 window.receive(model.focusRequest)
             }
             .onDisappear { window.detach() }
+            .onOpenURL { window.openLink($0) }
+            .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
             .onChange(of: window.accountID) { _, current in accountID = current }
             .onChange(of: model.focusRequest) { _, request in window.receive(request) }
             .onChange(of: model.waitingCount, initial: true) { _, count in

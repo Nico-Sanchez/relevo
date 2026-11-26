@@ -27,6 +27,10 @@ public struct DiffResult: Sendable, Equatable {
     public let base: String?
 }
 
+public struct NotAGitRepository: Error {
+    public init() {}
+}
+
 public enum GitDiff {
     public static func isRepository(_ directory: URL) -> Bool {
         var components = directory.standardizedFileURL.pathComponents
@@ -41,6 +45,7 @@ public enum GitDiff {
     }
 
     public static func load(in directory: URL, scope: DiffScope, environment: [String: String]) throws -> DiffResult {
+        guard isRepository(directory) else { throw NotAGitRepository() }
         let git = Git(directory: directory, environment: environment)
         var base: String?
         let target: String

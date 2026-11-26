@@ -93,6 +93,7 @@ public final class Session: Identifiable {
     @ObservationIgnored public var onReady: ((SessionInfo) -> Void)?
     @ObservationIgnored public var onMoment: ((Moment) -> Void)?
     @ObservationIgnored public var onFirstMessage: ((String) -> Void)?
+    @ObservationIgnored public var onUsage: (([UsageWindow]) -> Void)?
 
     private let environment: [String: String]
     private let executable: URL?
@@ -450,6 +451,7 @@ public final class Session: Identifiable {
             onMoment?(.needsYou(request))
         case .usage(let windows):
             usage = windows
+            onUsage?(windows)
         case .backgroundTasks(let tasks):
             backgroundTasks = tasks
         case .result(let result):

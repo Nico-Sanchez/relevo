@@ -11,6 +11,7 @@ struct RelevoCodeApp: App {
             WindowRoot(model: model, accountID: $accountID)
         }
         .windowResizability(.contentMinSize)
+        .handlesExternalEvents(matching: ["*"])
         .commands {
             WindowCommands(model: model)
         }
@@ -53,6 +54,9 @@ final class AppModel {
     let notifier: any Notifier
     private let defaults: UserDefaults
     private var loading: Task<Void, Never>?
+    var drafts: [Session.ID: String] = [:]
+    private var usage: [String: AccountUsage]
+    private var savedAccounts: [AccountSnapshot]?
 
     init(defaults: UserDefaults = .standard, notifier: any Notifier = SilentNotifier()) {
         self.defaults = defaults
@@ -67,6 +71,7 @@ final class AppModel {
         titles = (defaults.dictionary(forKey: "sessionTitles") as? [String: String]) ?? [:]
         catalogs = defaults.data(forKey: "modelCatalogs").flatMap { try? JSONDecoder().decode([String: [ModelOption]].self, from: $0) } ?? [:]
         accountEfforts = (defaults.dictionary(forKey: "accountEfforts") as? [String: String]) ?? [:]
+        usage = AccountsFile.usage(at: AccountsFile.location)
         notifier.onOpen = { [weak self] in self?.reveal($0) }
     }
 
@@ -180,6 +185,37 @@ final class AppModel {
         for account in accounts {
             accountInfo[account.id] = await account.status(executable: executable, environment: environment)
         }
+        saveAccounts()
+    }
+
+    func openLink(_ url: URL) throws(NewSessionLink.Problem) -> Session {
+        let link = try NewSessionLink(url)
+        let (account, folder) = try link.resolve(in: accounts)
+        let isRepository = FileManager.default.fileExists(atPath: folder.appending(path: ".git").path)
+        let session = newSession(in: folder, account: account, permissionMode: "default", worktree: isRepository)
+        drafts[session.id] = link.prompt
+        return session
+    }
+
+    static func describe(_ problem: NewSessionLink.Problem) -> String {
+        switch problem {
+        case .notNewSessionLink: String(localized: "Relevo Code only opens relevo-code://new links.")
+        case .missingAccount: String(localized: "The link doesn't say which account to use.")
+        case .unknownAccount(let id): String(localized: "No account here matches \(id). Add its folder in New Session first.")
+        case .missingFolder: String(localized: "The link doesn't say which folder to open.")
+        case .folderNotFound(let path): String(localized: "There's no folder at \(path).")
+        }
+    }
+
+    private func recordUsage(_ windows: [UsageWindow], configDirectory: URL?) {
+        usage[ClaudeAccount(configDirectory: configDirectory).id] = AccountUsage(windows, at: .now)
+        saveAccounts()
+    }
+
+    private func saveAccounts() {
+        let snapshots = accounts.map { AccountSnapshot(account: $0, info: accountInfo[$0.id], usage: usage[$0.id]) }
+        guard snapshots != savedAccounts, (try? AccountsFile.write(snapshots, at: .now, to: AccountsFile.location)) != nil else { return }
+        savedAccounts = snapshots
     }
 
     func refreshRecent() async {
@@ -306,15 +342,22 @@ final class AppModel {
     }
 
     func startSession(in folder: URL, account: ClaudeAccount, permissionMode: String, worktree: Bool) -> Session {
+        let session = newSession(in: folder, account: account, permissionMode: permissionMode, worktree: worktree)
+        lastFolder = folder
+        lastPermissionMode = permissionMode
+        session.start()
+        return session
+    }
+
+    private func newSession(in folder: URL, account: ClaudeAccount, permissionMode: String, worktree: Bool) -> Session {
         let configuration = SessionConfiguration(
             directory: folder, configDirectory: account.configDirectory, permissionMode: permissionMode,
             worktree: worktree ? "session-\(UUID().uuidString.prefix(6).lowercased())" : nil
         )
-        let session = Session(configuration: configuration, accountName: name(of: account), environment: environment ?? [:], executable: executable)
+        let session = Session(
+            configuration: configuration, accountName: name(of: account), environment: environment ?? [:], executable: executable, dormant: true
+        )
         show(session)
-        lastFolder = folder
-        lastPermissionMode = permissionMode
-        session.start()
         return session
     }
 
@@ -386,10 +429,15 @@ final class AppModel {
                 remember(title, for: id)
             }
         }
+        drafts.removeValue(forKey: session.id)
         sessions.removeAll { $0.id == session.id }
     }
 
     func observe(_ session: Session) {
+        session.onUsage = { [weak self, weak session] windows in
+            guard let self, let session else { return }
+            recordUsage(windows, configDirectory: session.configuration.configDirectory)
+        }
         session.onMoment = { [weak self, weak session] moment in
             guard let self, let session else { return }
             self.notice(moment, from: session)
@@ -512,6 +560,10 @@ struct ContentView: View {
         }
         .onChange(of: model.sessions.map(\.id)) {
             window.reconcile()
+        }
+        .alert("Can't open the link", isPresented: Binding(get: { window.linkProblem != nil }, set: { if !$0 { window.linkProblem = nil } })) {
+        } message: {
+            Text(window.linkProblem ?? "")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.refreshRecent() }
