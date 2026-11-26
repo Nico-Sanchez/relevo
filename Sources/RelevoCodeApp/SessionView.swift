@@ -35,6 +35,11 @@ struct SessionView: View {
         }
         .navigationTitle(session.title)
         .navigationSubtitle(session.workingDirectory.path)
+        .onAppear {
+            if let prompt = model.drafts.removeValue(forKey: session.id) {
+                draft = prompt
+            }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Menu {
