@@ -96,12 +96,53 @@ struct Transcript: View {
                 .padding(.vertical, 18)
                 .frame(maxWidth: .infinity)
             }
+            .startingAtBottom()
+            .focusedSceneValue(\.transcriptScroller, TranscriptScroller(session: session.id, proxy: proxy))
             .onChange(of: session.items) {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
             .onChange(of: session.pendingPermissions) {
                 proxy.scrollTo("bottom", anchor: .bottom)
             }
+        }
+    }
+}
+
+struct TranscriptScroller: Equatable {
+    let session: Session.ID
+    let proxy: ScrollViewProxy
+
+    func scrollToBottom() {
+        proxy.scrollTo("bottom", anchor: .bottom)
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.session == rhs.session
+    }
+}
+
+extension FocusedValues {
+    @Entry var transcriptScroller: TranscriptScroller?
+}
+
+private extension View {
+    @ViewBuilder func startingAtBottom() -> some View {
+        if #available(macOS 15, *) {
+            defaultScrollAnchor(.bottom, for: .initialOffset)
+        } else {
+            self
+        }
+    }
+}
+
+struct TranscriptCommands: Commands {
+    @FocusedValue(\.transcriptScroller) private var scroller
+
+    var body: some Commands {
+        CommandGroup(after: .toolbar) {
+            Button("Scroll to Bottom") { scroller?.scrollToBottom() }
+                .keyboardShortcut(.downArrow, modifiers: .command)
+                .disabled(scroller == nil)
         }
     }
 }
