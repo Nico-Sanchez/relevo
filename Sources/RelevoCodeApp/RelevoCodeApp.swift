@@ -20,6 +20,7 @@ struct RelevoCodeApp: App {
                 Button("New Session") { model.showingNewSession = true }
                     .keyboardShortcut("n")
             }
+            TranscriptCommands()
         }
     }
 }
